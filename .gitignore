@@ -4,3 +4,5 @@ __pycache__/
 outputs/
 samples/*
 !samples/README.md
+!samples/fixtures/
+!samples/fixtures/*.png

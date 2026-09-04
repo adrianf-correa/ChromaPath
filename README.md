@@ -121,8 +121,9 @@ O projeto utiliza o módulo `unittest`, incluído no Python:
 python -m unittest discover -s tests -v
 ```
 
-Os testes verificam as principais decisões do pré-processamento e confirmam que
-a simplificação das cores não modifica a quantidade de caminhos do SVG.
+Os testes verificam as principais decisões do pré-processamento, confirmam que
+a simplificação das cores não modifica a quantidade de caminhos do SVG e usam
+um par de imagens original para validar a remoção de ruído de ponta a ponta.
 
 ## Estrutura do projeto
 
@@ -141,8 +142,9 @@ ChromaPath/
     └── vectorize.py        # Integração com o VTracer
 ```
 
-As imagens usadas durante o desenvolvimento não são publicadas automaticamente.
-Isso evita distribuir arquivos sem uma licença de uso compatível.
+As imagens locais usadas durante o desenvolvimento não são publicadas
+automaticamente. Somente as amostras originais de `samples/fixtures/`, criadas
+para os testes automatizados, fazem parte do repositório.
 
 ## Limitações atuais
 
