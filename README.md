@@ -153,6 +153,9 @@ Isso evita distribuir arquivos sem uma licença de uso compatível.
 - Ampliar o conjunto de imagens de teste com arquivos redistribuíveis.
 - Criar uma interface simples para arrastar a imagem, visualizar e salvar o SVG.
 
+O ponto de retomada e a sequência planejada estão no
+[plano de próximas etapas](docs/next-steps.md).
+
 ## Registro de desenvolvimento
 
 Os resultados, hipóteses e ajustes realizados com as imagens de teste estão no
