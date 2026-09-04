@@ -99,6 +99,51 @@ class PipelineFixtureTests(unittest.TestCase):
         )
         self.assertEqual(noisy["report"]["filter_speckle"], 4)
 
+    def test_unique_irregular_detail_survives_noise_cleanup(self) -> None:
+        with TemporaryDirectory(prefix="chromapath-unique-") as directory:
+            temporary_root = Path(directory)
+            results = {}
+
+            for name in ("clean", "noisy"):
+                prepared_path = temporary_root / f"unique-{name}-prepared.png"
+                svg_path = temporary_root / f"unique-{name}.svg"
+                report = preprocess_colors(
+                    FIXTURES / f"unique-detail-{name}.png",
+                    prepared_path,
+                )
+                vectorize_image(
+                    prepared_path,
+                    svg_path,
+                    filter_speckle=report["filter_speckle"],
+                )
+                results[name] = {
+                    "report": report,
+                    "svg": analyze_svg(svg_path),
+                    "bytes": svg_path.read_bytes(),
+                }
+
+        clean = results["clean"]
+        noisy = results["noisy"]
+
+        self.assertEqual(clean["svg"]["paths"], 9)
+        self.assertEqual(clean["svg"]["colors"], 4)
+        self.assertEqual(noisy["svg"]["paths"], clean["svg"]["paths"])
+        self.assertEqual(noisy["svg"]["colors"], clean["svg"]["colors"])
+        self.assertEqual(noisy["bytes"], clean["bytes"])
+        self.assertEqual(
+            clean["report"]["isolated_cleanup"]["protected_unique_details"],
+            1,
+        )
+        self.assertEqual(
+            noisy["report"]["isolated_cleanup"]["protected_unique_details"],
+            1,
+        )
+        self.assertGreaterEqual(
+            noisy["report"]["isolated_cleanup"]["removed_components"],
+            8,
+        )
+        self.assertEqual(noisy["report"]["filter_speckle"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()

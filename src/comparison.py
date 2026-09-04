@@ -79,6 +79,9 @@ def compare_vectorizations(
             "protected_repeated_details": preprocessing_report[
                 "isolated_cleanup"
             ]["protected_repeated_details"],
+            "protected_unique_details": preprocessing_report[
+                "isolated_cleanup"
+            ]["protected_unique_details"],
             **analyze_svg(chromapath_path),
         },
     }
@@ -130,6 +133,10 @@ def print_comparison(report: dict) -> None:
     print(
         "Detalhes repetidos protegidos: "
         f"{report['chromapath']['protected_repeated_details']}"
+    )
+    print(
+        "Detalhes unicos protegidos: "
+        f"{report['chromapath']['protected_unique_details']}"
     )
 
     print("\nArquivos gerados:")

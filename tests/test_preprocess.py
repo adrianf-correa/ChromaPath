@@ -140,6 +140,28 @@ class FilterDecisionTests(unittest.TestCase):
                 (240, 190, 20, 255),
             )
 
+    def test_preserves_unique_irregular_contextual_detail(self) -> None:
+        image = np.full((300, 300, 4), 255, dtype=np.uint8)
+        image[90:240, 75:225, :3] = (20, 80, 160)
+        image[160:175, 140:155, :3] = (240, 70, 70)
+        detail_pixels = (
+            (48, 150),
+            (49, 149),
+            (49, 150),
+            (49, 151),
+            (50, 150),
+            (51, 150),
+        )
+        for row, column in detail_pixels:
+            image[row, column, :3] = (240, 70, 70)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertEqual(report["protected_unique_details"], 1)
+        self.assertEqual(report["removed_components"], 0)
+        for row, column in detail_pixels:
+            self.assertEqual(tuple(result[row, column]), (240, 70, 70, 255))
+
     def test_uses_stronger_speckle_filter_for_large_opaque_fringe(self) -> None:
         transparency = {
             "transparent_pixels": 170_000,

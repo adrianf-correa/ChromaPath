@@ -19,6 +19,7 @@ Cada imagem foi escolhida para revelar um tipo diferente de problema:
 | Mickey | Muitas cores e uma franja externa totalmente opaca | Remoção adaptativa de fragmentos e preservação dos contornos |
 | Robô limpo/ruidoso | Mesmo desenho com resíduos controlados | Remoção de pequenas regiões sem apagar detalhes legítimos |
 | Detalhes separados | Três símbolos legítimos e ruído aleatório | Proteção de padrões pequenos afastados do objeto principal |
+| Detalhe único | Uma estrela irregular e ruído aleatório | Proteção contextual sem depender de repetição |
 
 ## Linha de base do comparador
 
@@ -142,6 +143,20 @@ foram preservados. O limite do VTracer permaneceu em 4 pixels para não apagar o
 detalhes protegidos. As versões limpa e ruidosa terminaram com 11 caminhos,
 cinco cores e arquivos SVG idênticos byte por byte.
 
+## Detalhe único e irregular
+
+Uma terceira amostra determinística substituiu o padrão repetido por uma única
+estrela coral separada do emblema. Na primeira execução, a estrela sobreviveu à
+limpeza raster, mas foi apagada quando a detecção de ruído elevou a limpeza do
+VTracer para 32 pixels.
+
+O pipeline passou a proteger componentes de tamanho limitado que tenham forma
+irregular, estejam dentro da zona visual expandida do objeto principal e
+reutilizem uma de suas cores dominantes. A presença dessa evidência mantém a
+limpeza do VTracer em quatro pixels. Com a regra, a versão ruidosa removeu 14
+fragmentos e 222 pixels, preservou a estrela e produziu um SVG idêntico byte por
+byte ao da versão limpa: nove caminhos, quatro cores e Delta E 1.
+
 ## Heurísticas atuais
 
 Os valores abaixo são provisórios e existem para que possamos testar hipóteses:
@@ -163,6 +178,9 @@ Os valores abaixo são provisórios e existem para que possamos testar hipótese
 - três ou mais regiões pequenas, próximas, alinhadas e semelhantes em cor,
   tamanho e espaçamento são protegidas como um padrão intencional; quando essa
   proteção é usada, a limpeza mínima do VTracer permanece em 4 pixels.
+- um detalhe pequeno único também pode ser protegido quando sua forma é
+  irregular, sua posição pertence à zona visual do objeto e sua cor aparece
+  entre as cores dominantes da composição.
 
 Esses números não são configurações solicitadas ao usuário. Eles são decisões
 internas que deverão se tornar mais adaptativas conforme novos casos forem

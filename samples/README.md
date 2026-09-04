@@ -9,7 +9,8 @@ A subpasta `fixtures/` contém somente imagens originais e redistribuíveis usad
 pelos testes automatizados. O par do robô apresenta o mesmo desenho em uma
 versão limpa e outra com ruído controlado. O par `detached-details` acrescenta
 três pequenos losangos legítimos separados do objeto principal para confirmar
-que eles não sejam confundidos com resíduos.
+que eles não sejam confundidos com resíduos. O par `unique-detail` faz o mesmo
+com uma única estrela irregular relacionada visualmente ao emblema.
 
 As amostras determinísticas podem ser recriadas executando
 `python tools/generate_fixtures.py`.

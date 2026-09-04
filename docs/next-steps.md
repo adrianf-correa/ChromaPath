@@ -31,11 +31,15 @@ A proteção de detalhes separados também ganhou um caso reproduzível. Três
 losangos pequenos e alinhados foram mantidos enquanto 14 resíduos aleatórios
 foram descartados; os SVGs limpo e ruidoso ficaram idênticos.
 
+Um terceiro caso protege uma única estrela irregular pela relação de forma,
+posição e cor com o objeto principal. As versões limpa e ruidosa também ficaram
+idênticas byte por byte.
+
 ## Próximo incremento
 
-Validar detalhes pequenos únicos ou irregulares, que não podem depender de um
-padrão repetido para serem reconhecidos. A referência Delta E 8 será mantida
-provisoriamente como proteção enquanto o conjunto de testes cresce.
+Iniciar a fase de geometria com experimentos controlados de curvas, quinas e
+microdegraus. A referência Delta E 8 será mantida provisoriamente como proteção
+enquanto o conjunto de testes cresce.
 
 ## Por que o comparador veio primeiro
 

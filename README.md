@@ -22,6 +22,7 @@ de cores, limiares ou parâmetros técnicos do vetorizador.
 - Limpeza conservadora de franjas transparentes.
 - Normalização do interior de regiões quase pretas, preservando suas bordas.
 - Escolha automática da remoção mínima de pequenos fragmentos.
+- Proteção contextual de pequenos detalhes repetidos ou irregulares.
 - Simplificação adaptativa das cores finais sem impor uma paleta com tamanho
   fixo.
 - Vetorização colorida utilizando o VTracer como backend.

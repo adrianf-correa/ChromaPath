@@ -25,7 +25,7 @@ def draw_diamond(draw: ImageDraw.ImageDraw, x: int, y: int, radius: int) -> None
     )
 
 
-def create_clean_fixture() -> Image.Image:
+def create_badge() -> Image.Image:
     image = Image.new("RGBA", (WIDTH, HEIGHT), BACKGROUND)
     draw = ImageDraw.Draw(image)
 
@@ -48,9 +48,37 @@ def create_clean_fixture() -> Image.Image:
         fill=CORAL,
     )
 
+    return image
+
+
+def create_clean_fixture() -> Image.Image:
+    image = create_badge()
+    draw = ImageDraw.Draw(image)
+
     draw_diamond(draw, 360, 115, 4)
     draw_diamond(draw, 400, 115, 4)
     draw_diamond(draw, 440, 115, 4)
+    return image
+
+
+def create_unique_detail_fixture() -> Image.Image:
+    image = create_badge()
+    draw = ImageDraw.Draw(image)
+    draw.polygon(
+        (
+            (400, 105),
+            (402, 110),
+            (407, 112),
+            (403, 115),
+            (404, 121),
+            (399, 117),
+            (394, 120),
+            (396, 114),
+            (392, 111),
+            (398, 110),
+        ),
+        fill=CORAL,
+    )
     return image
 
 
@@ -84,6 +112,11 @@ def main() -> None:
     noisy = create_noisy_fixture(clean)
     clean.save(FIXTURES_DIRECTORY / "detached-details-clean.png")
     noisy.save(FIXTURES_DIRECTORY / "detached-details-noisy.png")
+
+    unique_clean = create_unique_detail_fixture()
+    unique_noisy = create_noisy_fixture(unique_clean)
+    unique_clean.save(FIXTURES_DIRECTORY / "unique-detail-clean.png")
+    unique_noisy.save(FIXTURES_DIRECTORY / "unique-detail-noisy.png")
 
 
 if __name__ == "__main__":
