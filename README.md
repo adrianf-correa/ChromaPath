@@ -22,7 +22,8 @@ de cores, limiares ou parâmetros técnicos do vetorizador.
 - Limpeza conservadora de franjas transparentes.
 - Normalização do interior de regiões quase pretas, preservando suas bordas.
 - Escolha automática da remoção mínima de pequenos fragmentos.
-- Simplificação das cores finais sem impor uma paleta com tamanho fixo.
+- Simplificação adaptativa das cores finais sem impor uma paleta com tamanho
+  fixo.
 - Vetorização colorida utilizando o VTracer como backend.
 
 ## Instalação
@@ -156,7 +157,7 @@ Isso evita distribuir arquivos sem uma licença de uso compatível.
 
 ## Roadmap
 
-- Tornar adaptativo o limite final de simplificação das cores.
+- Validar e refinar a tolerância adaptativa com mais estilos de imagem.
 - Melhorar a detecção de pequenas regiões sem remover detalhes relevantes.
 - Comparar o backend atual com os novos recursos do VTracer 1.0.
 - Ampliar o conjunto de imagens de teste com arquivos redistribuíveis.

@@ -28,12 +28,31 @@ o pré-processamento e a simplificação final de cores do ChromaPath.
 | --- | --- | --- | ---: | ---: |
 | Vaca | 55 / 47 / 104,1 KB | 43 / 8 / 101,9 KB | 21,8% | 83,0% |
 | Logo Perflex | 11 / 10 / 7,6 KB | 11 / 4 / 7,6 KB | 0% | 60,0% |
-| Cubo mágico | 397 / 168 / 291,7 KB | 29 / 5 / 138,1 KB | 92,7% | 97,0% |
+| Cubo mágico | 424 / 173 / 786,1 KB | 29 / 5 / 138,1 KB | 93,2% | 97,1% |
 | Mickey | 131 / 126 / 145,3 KB | 31 / 7 / 84,2 KB | 76,3% | 94,4% |
 
 Menos caminhos e cores normalmente tornam o SVG mais compacto e editável, mas
 esses números não comprovam sozinhos uma melhora visual. Toda alteração do
 pipeline deve combinar as métricas com a inspeção dos contornos e detalhes.
+
+## Primeira tolerância adaptativa
+
+O limite único de Delta E 8 foi substituído por uma escolha conservadora. O
+algoritmo simula tolerâncias de 1 a 12 e procura o início do patamar de cores que
+contém a referência já validada. As escolhas foram:
+
+| Caso | Delta E escolhido |
+| --- | ---: |
+| Cubo mágico | 1 |
+| Logo Perflex | 7 |
+| Mickey | 7 |
+| Vaca | 8 |
+
+Os quatro SVGs adaptativos ficaram idênticos byte por byte aos resultados
+anteriormente aprovados com Delta E 8. Isso confirma a ausência de regressão
+neste conjunto e permite usar a menor tolerância que preserva a paleta validada.
+A referência 8 ainda funciona como uma proteção interna; novos casos serão
+necessários para tornar a decisão progressivamente menos dependente dela.
 
 ## Vaca
 

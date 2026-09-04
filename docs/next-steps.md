@@ -18,11 +18,15 @@ simples, recebendo somente a imagem e produzindo o SVG final.
 O comparador também foi executado sobre os quatro casos locais. A linha de base
 com caminhos, cores e tamanho foi registrada em `docs/experiments.md`.
 
+A primeira tolerância adaptativa também foi implementada. Ela escolheu Delta E
+1 para o cubo, 7 para Perflex e Mickey e 8 para a vaca, produzindo arquivos
+idênticos aos quatro resultados anteriormente aprovados.
+
 ## Próximo incremento
 
-Iniciar a tolerância adaptativa de agrupamento das cores do SVG. O objetivo é
-substituir o limite único de Delta E 8 por uma decisão derivada da distribuição
-de cores de cada resultado, sem exigir um número fixo de cores.
+Validar a tolerância adaptativa com novas imagens e começar a detectar pequenas
+regiões, distinguindo ruído de detalhes relevantes. A referência Delta E 8 será
+mantida provisoriamente como proteção enquanto o conjunto de testes cresce.
 
 ## Por que o comparador veio primeiro
 
@@ -33,7 +37,7 @@ e Mickey sofreram regressões, sem depender somente da memória visual.
 ## Sequência depois do comparador
 
 1. Reunir imagens próprias ou com licença livre para testes públicos.
-2. Tornar adaptativa a tolerância final de agrupamento das cores.
+2. Refinar a tolerância adaptativa de agrupamento das cores.
 3. Detectar pequenas regiões e distinguir ruído de detalhes relevantes.
 4. Avaliar o VTracer 1.0 em ambiente separado, sem substituir de imediato a
    versão `0.6.15` que já funciona.

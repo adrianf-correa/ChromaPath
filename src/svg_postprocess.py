@@ -78,9 +78,12 @@ def build_color_mapping(
 
 def simplify_svg_colors(
     svg: str,
-    max_delta_e: float = SVG_COLOR_DELTA_E,
+    max_delta_e: float | None = None,
 ) -> tuple[str, dict]:
     """Unifica preenchimentos perceptualmente proximos e retorna um relatorio."""
+    if max_delta_e is None:
+        max_delta_e = estimate_adaptive_color_threshold(svg)
+
     fill_colors = SVG_FILL_PATTERN.findall(svg)
     mapping = build_color_mapping(fill_colors, max_delta_e=max_delta_e)
     changed_paths = 0
@@ -100,6 +103,71 @@ def simplify_svg_colors(
         "changed_paths": changed_paths,
         "max_delta_e": max_delta_e,
     }
+
+
+def analyze_color_thresholds(
+    svg: str,
+    thresholds: tuple[float, ...] = (
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+    ),
+) -> list[dict]:
+    """Simula diferentes tolerâncias sem escolher um número fixo de cores."""
+    reports = []
+
+    for threshold in thresholds:
+        _, report = simplify_svg_colors(
+            svg,
+            max_delta_e=threshold,
+        )
+        reports.append(report)
+
+    return reports
+
+
+def choose_stable_threshold(
+    reports: list[dict],
+    reference_delta_e: float = SVG_COLOR_DELTA_E,
+) -> float:
+    """Escolhe o início do patamar que contém a tolerância de referência."""
+    eligible_reports = sorted(
+        (
+            report
+            for report in reports
+            if report["max_delta_e"] <= reference_delta_e
+        ),
+        key=lambda report: report["max_delta_e"],
+    )
+
+    if not eligible_reports:
+        return reference_delta_e
+
+    reference_report = eligible_reports[-1]
+    target_color_count = reference_report["colors_after"]
+    chosen_threshold = reference_report["max_delta_e"]
+
+    for report in reversed(eligible_reports[:-1]):
+        if report["colors_after"] != target_color_count:
+            break
+        chosen_threshold = report["max_delta_e"]
+
+    return chosen_threshold
+
+
+def estimate_adaptive_color_threshold(svg: str) -> float:
+    """Estima a menor tolerância no patamar validado de simplificação."""
+    reports = analyze_color_thresholds(svg)
+    return choose_stable_threshold(reports)
 
 
 def simplify_svg_file(input_path: Path, output_path: Path) -> dict:

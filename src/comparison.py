@@ -1,8 +1,10 @@
 import argparse
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from src.preprocess import preprocess_and_vectorize
+from src.preprocess import preprocess_colors
 from src.svg_analysis import analyze_svg
+from src.svg_postprocess import estimate_adaptive_color_threshold
 from src.vectorize import vectorize_image
 
 
@@ -10,10 +12,11 @@ def compare_vectorizations(
     input_path: Path,
     output_directory: Path = Path("outputs/comparisons"),
 ) -> dict:
-    """Gera e analisa as versões baseline e ChromaPath de uma imagem."""
+    """Gera e analisa as etapas baseline, preparada e final."""
     output_directory.mkdir(parents=True, exist_ok=True)
 
     baseline_path = output_directory / f"{input_path.stem}-baseline.svg"
+    prepared_path = output_directory / f"{input_path.stem}-prepared.svg"
     chromapath_path = output_directory / f"{input_path.stem}-chromapath.svg"
 
     vectorize_image(
@@ -21,18 +24,45 @@ def compare_vectorizations(
         baseline_path,
         simplify_colors=False,
     )
-    preprocess_and_vectorize(
-        input_path,
-        chromapath_path,
-    )
+
+    with TemporaryDirectory(
+        prefix="chromapath-comparison-"
+    ) as temporary_directory:
+        prepared_image = Path(temporary_directory) / "prepared.png"
+        preprocessing_report = preprocess_colors(
+            input_path,
+            prepared_image,
+        )
+        filter_speckle = preprocessing_report["filter_speckle"]
+
+        vectorize_image(
+            prepared_image,
+            prepared_path,
+            simplify_colors=False,
+            filter_speckle=filter_speckle,
+        )
+        prepared_svg = prepared_path.read_text(encoding="utf-8")
+        adaptive_delta_e = estimate_adaptive_color_threshold(prepared_svg)
+
+        vectorize_image(
+            prepared_image,
+            chromapath_path,
+            simplify_colors=True,
+            filter_speckle=filter_speckle,
+        )
 
     return {
         "baseline": {
             "path": baseline_path,
             **analyze_svg(baseline_path),
         },
+        "prepared": {
+            "path": prepared_path,
+            **analyze_svg(prepared_path),
+        },
         "chromapath": {
             "path": chromapath_path,
+            "delta_e": adaptive_delta_e,
             **analyze_svg(chromapath_path),
         },
     }
@@ -46,13 +76,19 @@ def format_bytes(size: int) -> str:
 
 
 def print_comparison(report: dict) -> None:
-    """Exibe as métricas das duas versões no terminal."""
+    """Exibe as métricas das etapas comparadas no terminal."""
     print("\nComparação concluída:\n")
     print(f"{'Versão':<12} {'Caminhos':>9} {'Cores':>7} {'Tamanho':>10}")
     print("-" * 42)
 
+    labels = {
+        "baseline": "Baseline",
+        "prepared": "Preparado",
+        "chromapath": "ChromaPath",
+    }
+
     for name, metrics in report.items():
-        label = "Baseline" if name == "baseline" else "ChromaPath"
+        label = labels[name]
         print(
             f"{label:<12} "
             f"{metrics['paths']:>9} "
@@ -60,9 +96,11 @@ def print_comparison(report: dict) -> None:
             f"{format_bytes(metrics['bytes']):>10}"
         )
 
+    print(f"\nDelta E adaptativo: {report['chromapath']['delta_e']:.1f}")
+
     print("\nArquivos gerados:")
-    print(f"Baseline:   {report['baseline']['path']}")
-    print(f"ChromaPath: {report['chromapath']['path']}")
+    for name, metrics in report.items():
+        print(f"{labels[name]:<10}: {metrics['path']}")
 
 
 def main() -> None:
