@@ -135,6 +135,7 @@ ChromaPath/
 ├── samples/                # Imagens locais usadas no desenvolvimento
 ├── outputs/                # Resultados gerados localmente
 ├── tests/                  # Testes automatizados
+├── tools/                  # Geração reproduzível das amostras públicas
 └── src/
     ├── color_analysis.py   # Diagnóstico e comparação de cores
     ├── preprocess.py       # Pré-processamento adaptativo

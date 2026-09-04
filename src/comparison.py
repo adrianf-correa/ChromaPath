@@ -76,6 +76,9 @@ def compare_vectorizations(
             "removed_protrusion_pixels": preprocessing_report[
                 "isolated_cleanup"
             ]["removed_protrusion_pixels"],
+            "protected_repeated_details": preprocessing_report[
+                "isolated_cleanup"
+            ]["protected_repeated_details"],
             **analyze_svg(chromapath_path),
         },
     }
@@ -123,6 +126,10 @@ def print_comparison(report: dict) -> None:
         "Saliencias do contorno removidas: "
         f"{report['chromapath']['removed_protrusions']} "
         f"({report['chromapath']['removed_protrusion_pixels']:,} pixels)"
+    )
+    print(
+        "Detalhes repetidos protegidos: "
+        f"{report['chromapath']['protected_repeated_details']}"
     )
 
     print("\nArquivos gerados:")

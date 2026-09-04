@@ -124,6 +124,22 @@ class FilterDecisionTests(unittest.TestCase):
         self.assertGreaterEqual(report["removed_protrusions"], 1)
         self.assertEqual(tuple(result[49, 77]), (255, 255, 255, 255))
 
+    def test_preserves_three_repeated_detached_details(self) -> None:
+        image = np.full((300, 300, 4), 255, dtype=np.uint8)
+        image[90:240, 75:225, :3] = (20, 80, 160)
+        for column in (120, 150, 180):
+            image[30:33, column : column + 3, :3] = (240, 190, 20)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertEqual(report["protected_repeated_details"], 3)
+        self.assertEqual(report["removed_components"], 0)
+        for column in (120, 150, 180):
+            self.assertEqual(
+                tuple(result[31, column + 1]),
+                (240, 190, 20, 255),
+            )
+
     def test_uses_stronger_speckle_filter_for_large_opaque_fringe(self) -> None:
         transparency = {
             "transparent_pixels": 170_000,
@@ -164,3 +180,23 @@ class FilterDecisionTests(unittest.TestCase):
         )
 
         self.assertEqual(result, 32)
+
+    def test_keeps_safe_filter_for_protected_repeated_details(self) -> None:
+        transparency = {
+            "transparent_pixels": 0,
+            "semitransparent_pixels": 0,
+            "opaque_pixels": 480_000,
+        }
+        isolated_cleanup = {
+            "applied": True,
+            "removed_components": 14,
+            "protected_repeated_details": 3,
+        }
+
+        result = choose_filter_speckle(
+            transparency,
+            unique_colors=20,
+            isolated_cleanup=isolated_cleanup,
+        )
+
+        self.assertEqual(result, 4)

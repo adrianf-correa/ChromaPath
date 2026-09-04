@@ -18,6 +18,7 @@ Cada imagem foi escolhida para revelar um tipo diferente de problema:
 | Cubo mágico | Transparência, bordas externas e gradientes | Limpeza de franjas sem simplificar excessivamente as faces |
 | Mickey | Muitas cores e uma franja externa totalmente opaca | Remoção adaptativa de fragmentos e preservação dos contornos |
 | Robô limpo/ruidoso | Mesmo desenho com resíduos controlados | Remoção de pequenas regiões sem apagar detalhes legítimos |
+| Detalhes separados | Três símbolos legítimos e ruído aleatório | Proteção de padrões pequenos afastados do objeto principal |
 
 ## Linha de base do comparador
 
@@ -127,6 +128,20 @@ pixel removido pela nova regra. A inspeção visual ainda encontrou dois pequeno
 degraus na parte superior; eles foram aceitos como limitação conhecida, pois
 aumentar a agressividade colocaria curvas legítimas em risco.
 
+## Detalhes legítimos separados
+
+Uma segunda amostra determinística adicionou três losangos amarelos pequenos,
+alinhados e separados do objeto principal. A primeira execução removeu os três
+como se fossem ruído, mostrando que proximidade com o objeto não basta para
+reconhecer detalhes relevantes.
+
+A proteção passou a considerar repetição de cor e tamanho, proximidade entre os
+componentes, alinhamento e regularidade do espaçamento. Na versão ruidosa, 14
+fragmentos aleatórios e 222 pixels foram removidos, enquanto os três losangos
+foram preservados. O limite do VTracer permaneceu em 4 pixels para não apagar os
+detalhes protegidos. As versões limpa e ruidosa terminaram com 11 caminhos,
+cinco cores e arquivos SVG idênticos byte por byte.
+
 ## Heurísticas atuais
 
 Os valores abaixo são provisórios e existem para que possamos testar hipóteses:
@@ -145,6 +160,9 @@ Os valores abaixo são provisórios e existem para que possamos testar hipótese
   análise de fundo uniforme comprova a presença de vários resíduos isolados;
 - a limpeza de saliências externas só é ativada após essa comprovação de ruído,
   com escala proporcional à resolução e limite máximo de 21 pixels.
+- três ou mais regiões pequenas, próximas, alinhadas e semelhantes em cor,
+  tamanho e espaçamento são protegidas como um padrão intencional; quando essa
+  proteção é usada, a limpeza mínima do VTracer permanece em 4 pixels.
 
 Esses números não são configurações solicitadas ao usuário. Eles são decisões
 internas que deverão se tornar mais adaptativas conforme novos casos forem

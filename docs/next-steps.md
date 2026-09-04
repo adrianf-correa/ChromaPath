@@ -27,11 +27,15 @@ par controlado de mascotes limpo e ruidoso, ambos terminaram com 17 caminhos e
 cinco cores. A regra só atua quando encontra um fundo uniforme e evidência
 suficiente de resíduos, preservando a versão limpa sem alterações.
 
+A proteção de detalhes separados também ganhou um caso reproduzível. Três
+losangos pequenos e alinhados foram mantidos enquanto 14 resíduos aleatórios
+foram descartados; os SVGs limpo e ruidoso ficaram idênticos.
+
 ## Próximo incremento
 
-Validar em uma nova imagem a combinação entre a tolerância de cores e a limpeza
-de pequenas regiões. A referência Delta E 8 será mantida provisoriamente como
-proteção enquanto o conjunto de testes cresce.
+Validar detalhes pequenos únicos ou irregulares, que não podem depender de um
+padrão repetido para serem reconhecidos. A referência Delta E 8 será mantida
+provisoriamente como proteção enquanto o conjunto de testes cresce.
 
 ## Por que o comparador veio primeiro
 

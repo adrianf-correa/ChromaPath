@@ -40,6 +40,13 @@ SILHOUETTE_OPENING_RATIO = 0.017
 MIN_SILHOUETTE_KERNEL_SIZE = 5
 MAX_SILHOUETTE_KERNEL_SIZE = 21
 MIN_PROTRUSION_AREA = 4
+REPEATED_DETAIL_MIN_COUNT = 3
+REPEATED_DETAIL_MIN_AREA_RATIO = 0.5
+REPEATED_DETAIL_AREA_TOLERANCE = 0.25
+REPEATED_DETAIL_COLOR_DELTA_E = 3.0
+REPEATED_DETAIL_CLUSTER_RATIO = 0.12
+REPEATED_DETAIL_ALIGNMENT_RATIO = 0.01
+REPEATED_DETAIL_SPACING_RATIO = 1.5
 
 
 def estimate_filter_delta_e(neighbor_analysis: dict) -> float:
@@ -78,6 +85,79 @@ def remove_low_alpha_fringe(rgba_array: np.ndarray) -> tuple[np.ndarray, int]:
     return result, removed_pixels
 
 
+def _find_repeated_detail_labels(
+    rgba_array: np.ndarray,
+    labels: np.ndarray,
+    stats: np.ndarray,
+    centroids: np.ndarray,
+    candidate_labels: list[int],
+    area_limit: int,
+) -> set[int]:
+    """Protege pequenos componentes repetidos com cor e tamanho semelhantes."""
+    minimum_area = max(
+        MIN_ISOLATED_COMPONENT_AREA,
+        round(area_limit * REPEATED_DETAIL_MIN_AREA_RATIO),
+    )
+    features = []
+
+    for label in candidate_labels:
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < minimum_area:
+            continue
+        component_pixels = rgba_array[:, :, :3][labels == label]
+        representative_rgb = np.median(component_pixels, axis=0).astype(np.uint8)
+        representative_lab = cv2.cvtColor(
+            representative_rgb.reshape(1, 1, 3).astype(np.float32) / 255.0,
+            cv2.COLOR_RGB2LAB,
+        )[0, 0]
+        features.append((label, area, representative_lab, centroids[label]))
+
+    protected_labels: set[int] = set()
+    cluster_radius = min(rgba_array.shape[:2]) * REPEATED_DETAIL_CLUSTER_RATIO
+    alignment_limit = max(
+        2.0,
+        min(rgba_array.shape[:2]) * REPEATED_DETAIL_ALIGNMENT_RATIO,
+    )
+    for _, reference_area, reference_lab, reference_center in features:
+        matching_features = []
+        for label, area, lab_color, center in features:
+            area_difference = abs(area - reference_area) / max(area, reference_area)
+            color_difference = float(np.linalg.norm(lab_color - reference_lab))
+            spatial_distance = float(np.linalg.norm(center - reference_center))
+            if (
+                area_difference <= REPEATED_DETAIL_AREA_TOLERANCE
+                and color_difference <= REPEATED_DETAIL_COLOR_DELTA_E
+                and spatial_distance <= cluster_radius
+            ):
+                matching_features.append((label, center))
+        if len(matching_features) < REPEATED_DETAIL_MIN_COUNT:
+            continue
+
+        points = np.array([center for _, center in matching_features])
+        centered_points = points - np.mean(points, axis=0)
+        _, _, directions = np.linalg.svd(centered_points, full_matrices=False)
+        primary_direction = directions[0]
+        raw_projections = centered_points @ primary_direction
+        perpendicular = centered_points - np.outer(
+            raw_projections,
+            primary_direction,
+        )
+        if float(np.max(np.linalg.norm(perpendicular, axis=1))) > alignment_limit:
+            continue
+
+        spacings = np.diff(np.sort(raw_projections))
+        positive_spacings = np.abs(spacings[np.abs(spacings) > 1e-6])
+        if positive_spacings.size < REPEATED_DETAIL_MIN_COUNT - 1:
+            continue
+        if float(np.max(positive_spacings) / np.min(positive_spacings)) > (
+            REPEATED_DETAIL_SPACING_RATIO
+        ):
+            continue
+        protected_labels.update(label for label, _ in matching_features)
+
+    return protected_labels
+
+
 def remove_isolated_background_speckles(
     rgba_array: np.ndarray,
 ) -> tuple[np.ndarray, dict]:
@@ -99,6 +179,7 @@ def remove_isolated_background_speckles(
         "removed_pixels": 0,
         "removed_protrusions": 0,
         "removed_protrusion_pixels": 0,
+        "protected_repeated_details": 0,
         "area_limit": max(
             MIN_ISOLATED_COMPONENT_AREA,
             round(height * width * ISOLATED_COMPONENT_AREA_RATIO),
@@ -136,7 +217,7 @@ def remove_isolated_background_speckles(
         & (background_distances > BACKGROUND_FOREGROUND_DELTA_E)
     ).astype(np.uint8)
 
-    component_count, labels, stats, _ = cv2.connectedComponentsWithStats(
+    component_count, labels, stats, centroids = cv2.connectedComponentsWithStats(
         foreground_mask,
         connectivity=8,
     )
@@ -157,7 +238,7 @@ def remove_isolated_background_speckles(
         5,
     )
     protected_distance = max(2.0, min(height, width) * NEAR_MAIN_PROTECTION_RATIO)
-    removable_labels: list[int] = []
+    candidate_labels: list[int] = []
 
     for label in range(1, component_count):
         if label == main_label:
@@ -168,7 +249,20 @@ def remove_isolated_background_speckles(
         component_mask = labels == label
         if float(np.min(distance_to_main[component_mask])) <= protected_distance:
             continue
-        removable_labels.append(label)
+        candidate_labels.append(label)
+
+    protected_repeated_labels = _find_repeated_detail_labels(
+        rgba_array,
+        labels,
+        stats,
+        centroids,
+        candidate_labels,
+        report["area_limit"],
+    )
+    removable_labels = [
+        label for label in candidate_labels if label not in protected_repeated_labels
+    ]
+    report["protected_repeated_details"] = len(protected_repeated_labels)
 
     result = rgba_array.copy()
     removal_mask = np.zeros((height, width), dtype=bool)
@@ -181,6 +275,7 @@ def remove_isolated_background_speckles(
 
     if len(removable_labels) >= NOISY_BACKGROUND_MIN_REMOVED_COMPONENTS:
         foreground_after_cleanup = foreground_mask.astype(bool) & ~removal_mask
+        protected_repeated_mask = np.isin(labels, list(protected_repeated_labels))
         _, background_labels = cv2.connectedComponents(
             (~foreground_after_cleanup).astype(np.uint8),
             connectivity=8,
@@ -230,6 +325,8 @@ def remove_isolated_background_speckles(
             if area < MIN_PROTRUSION_AREA or area > report["area_limit"]:
                 continue
             component_mask = protrusion_labels == protrusion_label
+            if np.any(component_mask & protected_repeated_mask):
+                continue
             expanded_component = cv2.dilate(
                 component_mask.astype(np.uint8),
                 adjacency_kernel,
@@ -260,6 +357,13 @@ def choose_filter_speckle(
     isolated_cleanup: dict | None = None,
 ) -> int:
     """Escolhe uma limpeza maior para franjas opacas grandes e fragmentadas."""
+    has_protected_repeated_details = (
+        isolated_cleanup is not None
+        and isolated_cleanup.get("protected_repeated_details", 0) > 0
+    )
+    if has_protected_repeated_details:
+        return DEFAULT_FILTER_SPECKLE
+
     has_detected_background_noise = (
         isolated_cleanup is not None
         and isolated_cleanup["applied"]
@@ -434,6 +538,10 @@ def main() -> None:
         "Fragmentos isolados removidos: "
         f"{isolated['removed_components']} "
         f"({isolated['removed_pixels']:,} pixels)"
+    )
+    print(
+        "Detalhes repetidos protegidos: "
+        f"{isolated['protected_repeated_details']}"
     )
     print(f"Limpeza minima de regioes: {result['filter_speckle']} pixels")
     print(f"Pixels alterados: {result['changed_pixels']:,}")
