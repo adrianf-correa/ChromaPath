@@ -17,6 +17,7 @@ Cada imagem foi escolhida para revelar um tipo diferente de problema:
 | Logo Perflex | Logotipo com poucos pixels de altura | Quinas, curvas, diagonais, pontas e traços finos |
 | Cubo mágico | Transparência, bordas externas e gradientes | Limpeza de franjas sem simplificar excessivamente as faces |
 | Mickey | Muitas cores e uma franja externa totalmente opaca | Remoção adaptativa de fragmentos e preservação dos contornos |
+| Robô limpo/ruidoso | Mesmo desenho com resíduos controlados | Remoção de pequenas regiões sem apagar detalhes legítimos |
 
 ## Linha de base do comparador
 
@@ -107,6 +108,25 @@ A normalização dos preenchimentos muito escuros também removeu tons marrons q
 apareciam nos contornos. Esse resultado motivou uma regra distinta para imagens
 transparentes grandes, com muitas cores exatas e bordas opacas fragmentadas.
 
+## Robô limpo e ruidoso
+
+Um mascote original foi gerado em duas versões: uma limpa e outra com pequenos
+fragmentos isolados e saliências encostadas à silhueta. A baseline da versão
+ruidosa produziu 56 caminhos e 54 cores, contra 19 caminhos e 19 cores na
+versão limpa.
+
+Quando as bordas comprovam a existência de um fundo opaco uniforme, o pipeline
+agora localiza componentes minúsculos afastados do objeto principal. Se pelo
+menos oito deles forem removidos, a limpeza mínima do VTracer passa de 4 para
+32 pixels e uma abertura morfológica limitada atua somente na silhueta externa.
+
+No caso ruidoso, foram removidos 23 fragmentos isolados, com 3.301 pixels, e
+seis saliências do contorno, com 226 pixels. As duas versões terminaram com 17
+caminhos, cinco cores e Delta E adaptativo 4. A versão limpa não teve nenhum
+pixel removido pela nova regra. A inspeção visual ainda encontrou dois pequenos
+degraus na parte superior; eles foram aceitos como limitação conhecida, pois
+aumentar a agressividade colocaria curvas legítimas em risco.
+
 ## Heurísticas atuais
 
 Os valores abaixo são provisórios e existem para que possamos testar hipóteses:
@@ -121,7 +141,10 @@ Os valores abaixo são provisórios e existem para que possamos testar hipótese
   transparência permite;
 - a simplificação dos preenchimentos do SVG utiliza provisoriamente Delta E 8;
 - a limpeza mínima padrão do VTracer é de 4 pixels e pode passar para 16 em
-  imagens grandes com uma franja opaca muito fragmentada.
+  imagens grandes com uma franja opaca muito fragmentada ou para 32 quando a
+  análise de fundo uniforme comprova a presença de vários resíduos isolados;
+- a limpeza de saliências externas só é ativada após essa comprovação de ruído,
+  com escala proporcional à resolução e limite máximo de 21 pixels.
 
 Esses números não são configurações solicitadas ao usuário. Eles são decisões
 internas que deverão se tornar mais adaptativas conforme novos casos forem

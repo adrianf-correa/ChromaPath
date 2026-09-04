@@ -63,6 +63,19 @@ def compare_vectorizations(
         "chromapath": {
             "path": chromapath_path,
             "delta_e": adaptive_delta_e,
+            "filter_speckle": filter_speckle,
+            "removed_fragments": preprocessing_report[
+                "isolated_cleanup"
+            ]["removed_components"],
+            "removed_fragment_pixels": preprocessing_report[
+                "isolated_cleanup"
+            ]["removed_pixels"],
+            "removed_protrusions": preprocessing_report[
+                "isolated_cleanup"
+            ]["removed_protrusions"],
+            "removed_protrusion_pixels": preprocessing_report[
+                "isolated_cleanup"
+            ]["removed_protrusion_pixels"],
             **analyze_svg(chromapath_path),
         },
     }
@@ -97,6 +110,20 @@ def print_comparison(report: dict) -> None:
         )
 
     print(f"\nDelta E adaptativo: {report['chromapath']['delta_e']:.1f}")
+    print(
+        "Limpeza de regioes: "
+        f"{report['chromapath']['filter_speckle']} pixels"
+    )
+    print(
+        "Fragmentos isolados removidos: "
+        f"{report['chromapath']['removed_fragments']} "
+        f"({report['chromapath']['removed_fragment_pixels']:,} pixels)"
+    )
+    print(
+        "Saliencias do contorno removidas: "
+        f"{report['chromapath']['removed_protrusions']} "
+        f"({report['chromapath']['removed_protrusion_pixels']:,} pixels)"
+    )
 
     print("\nArquivos gerados:")
     for name, metrics in report.items():

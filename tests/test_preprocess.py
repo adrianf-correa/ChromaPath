@@ -6,6 +6,7 @@ from src.preprocess import (
     choose_filter_speckle,
     normalize_near_black_interiors,
     remove_low_alpha_fringe,
+    remove_isolated_background_speckles,
     should_apply_bilateral_filter,
 )
 
@@ -71,6 +72,58 @@ class FilterDecisionTests(unittest.TestCase):
         self.assertEqual(tuple(result[0, 1]), (10, 20, 30, 32))
         self.assertEqual(removed_pixels, 1)
 
+    def test_removes_tiny_isolated_regions_from_uniform_background(self) -> None:
+        image = np.full((100, 100, 4), 255, dtype=np.uint8)
+        image[30:70, 30:70, :3] = (20, 80, 160)
+        image[5:7, 5:7, :3] = (220, 30, 30)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertTrue(report["applied"])
+        self.assertEqual(report["removed_components"], 1)
+        self.assertEqual(report["removed_pixels"], 4)
+        self.assertEqual(tuple(result[5, 5]), (255, 255, 255, 255))
+        self.assertEqual(tuple(result[30, 30]), (20, 80, 160, 255))
+
+    def test_preserves_small_region_near_main_object(self) -> None:
+        image = np.full((100, 100, 4), 255, dtype=np.uint8)
+        image[30:70, 30:70, :3] = (20, 80, 160)
+        image[48:50, 48:50, :3] = (240, 190, 20)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertTrue(report["applied"])
+        self.assertEqual(report["removed_components"], 0)
+        self.assertEqual(tuple(result[48, 48]), (240, 190, 20, 255))
+
+    def test_skips_isolated_cleanup_when_border_is_not_uniform(self) -> None:
+        image = np.full((100, 100, 4), 255, dtype=np.uint8)
+        image[0, ::2, :3] = (0, 0, 0)
+        image[-1, ::2, :3] = (0, 0, 0)
+        image[::2, 0, :3] = (0, 0, 0)
+        image[::2, -1, :3] = (0, 0, 0)
+        image[5:7, 5:7, :3] = (220, 30, 30)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertFalse(report["applied"])
+        self.assertEqual(report["removed_components"], 0)
+        np.testing.assert_array_equal(result, image)
+
+    def test_removes_small_protrusion_after_detecting_background_noise(self) -> None:
+        image = np.full((100, 100, 4), 255, dtype=np.uint8)
+        image[25:75, 25:75, :3] = (20, 80, 160)
+        image[48:52, 75:78, :3] = (20, 80, 160)
+        for index in range(8):
+            row = 5 + index * 2
+            image[row, 5:7, :3] = (220, 30, 30)
+
+        result, report = remove_isolated_background_speckles(image)
+
+        self.assertEqual(report["removed_components"], 8)
+        self.assertGreaterEqual(report["removed_protrusions"], 1)
+        self.assertEqual(tuple(result[49, 77]), (255, 255, 255, 255))
+
     def test_uses_stronger_speckle_filter_for_large_opaque_fringe(self) -> None:
         transparency = {
             "transparent_pixels": 170_000,
@@ -92,3 +145,22 @@ class FilterDecisionTests(unittest.TestCase):
         result = choose_filter_speckle(transparency, unique_colors=6_000)
 
         self.assertEqual(result, 4)
+
+    def test_uses_stronger_filter_after_detecting_background_noise(self) -> None:
+        transparency = {
+            "transparent_pixels": 0,
+            "semitransparent_pixels": 0,
+            "opaque_pixels": 1_500_000,
+        }
+        isolated_cleanup = {
+            "applied": True,
+            "removed_components": 20,
+        }
+
+        result = choose_filter_speckle(
+            transparency,
+            unique_colors=50,
+            isolated_cleanup=isolated_cleanup,
+        )
+
+        self.assertEqual(result, 32)

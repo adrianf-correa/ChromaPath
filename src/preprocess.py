@@ -27,6 +27,19 @@ DEFAULT_FILTER_SPECKLE = 4
 OPAQUE_FRINGE_FILTER_SPECKLE = 16
 OPAQUE_FRINGE_MIN_VISIBLE_PIXELS = 100_000
 OPAQUE_FRINGE_MIN_UNIQUE_COLORS = 1_000
+BACKGROUND_BORDER_DELTA_E = 3.0
+BACKGROUND_FOREGROUND_DELTA_E = 6.0
+BACKGROUND_MIN_BORDER_COVERAGE = 95.0
+ISOLATED_COMPONENT_AREA_RATIO = 0.0001
+MIN_ISOLATED_COMPONENT_AREA = 4
+MAIN_COMPONENT_MIN_AREA_RATIO = 0.01
+NEAR_MAIN_PROTECTION_RATIO = 0.015
+NOISY_BACKGROUND_FILTER_SPECKLE = 32
+NOISY_BACKGROUND_MIN_REMOVED_COMPONENTS = 8
+SILHOUETTE_OPENING_RATIO = 0.017
+MIN_SILHOUETTE_KERNEL_SIZE = 5
+MAX_SILHOUETTE_KERNEL_SIZE = 21
+MIN_PROTRUSION_AREA = 4
 
 
 def estimate_filter_delta_e(neighbor_analysis: dict) -> float:
@@ -65,11 +78,197 @@ def remove_low_alpha_fringe(rgba_array: np.ndarray) -> tuple[np.ndarray, int]:
     return result, removed_pixels
 
 
+def remove_isolated_background_speckles(
+    rgba_array: np.ndarray,
+) -> tuple[np.ndarray, dict]:
+    """Remove regioes minimas afastadas de um objeto sobre fundo uniforme."""
+    height, width = rgba_array.shape[:2]
+    border = np.concatenate(
+        (
+            rgba_array[0, :, :],
+            rgba_array[-1, :, :],
+            rgba_array[:, 0, :],
+            rgba_array[:, -1, :],
+        ),
+        axis=0,
+    )
+
+    report = {
+        "applied": False,
+        "removed_components": 0,
+        "removed_pixels": 0,
+        "removed_protrusions": 0,
+        "removed_protrusion_pixels": 0,
+        "area_limit": max(
+            MIN_ISOLATED_COMPONENT_AREA,
+            round(height * width * ISOLATED_COMPONENT_AREA_RATIO),
+        ),
+        "background_rgb": None,
+        "border_coverage": 0.0,
+    }
+
+    if np.count_nonzero(border[:, 3] == 255) < border.shape[0] * 0.99:
+        return rgba_array.copy(), report
+
+    background_rgb = np.median(border[:, :3], axis=0).round().astype(np.uint8)
+    border_rgb = border[:, :3].astype(np.float32) / 255.0
+    background_sample = background_rgb.reshape(1, 1, 3).astype(np.float32) / 255.0
+    border_lab = cv2.cvtColor(border_rgb.reshape(-1, 1, 3), cv2.COLOR_RGB2LAB)
+    background_lab = cv2.cvtColor(background_sample, cv2.COLOR_RGB2LAB)[0, 0]
+    border_distances = np.linalg.norm(
+        border_lab[:, 0, :] - background_lab,
+        axis=1,
+    )
+    border_coverage = float(
+        np.mean(border_distances <= BACKGROUND_BORDER_DELTA_E) * 100.0
+    )
+    report["background_rgb"] = tuple(int(channel) for channel in background_rgb)
+    report["border_coverage"] = border_coverage
+
+    if border_coverage < BACKGROUND_MIN_BORDER_COVERAGE:
+        return rgba_array.copy(), report
+
+    rgb_array = rgba_array[:, :, :3].astype(np.float32) / 255.0
+    lab_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2LAB)
+    background_distances = np.linalg.norm(lab_array - background_lab, axis=2)
+    foreground_mask = (
+        (rgba_array[:, :, 3] > LOW_ALPHA_FRINGE_LIMIT)
+        & (background_distances > BACKGROUND_FOREGROUND_DELTA_E)
+    ).astype(np.uint8)
+
+    component_count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        foreground_mask,
+        connectivity=8,
+    )
+    if component_count <= 1:
+        report["applied"] = True
+        return rgba_array.copy(), report
+
+    component_areas = stats[1:, cv2.CC_STAT_AREA]
+    main_label = int(np.argmax(component_areas)) + 1
+    main_area = int(stats[main_label, cv2.CC_STAT_AREA])
+    if main_area < height * width * MAIN_COMPONENT_MIN_AREA_RATIO:
+        return rgba_array.copy(), report
+
+    main_mask = labels == main_label
+    distance_to_main = cv2.distanceTransform(
+        (~main_mask).astype(np.uint8),
+        cv2.DIST_L2,
+        5,
+    )
+    protected_distance = max(2.0, min(height, width) * NEAR_MAIN_PROTECTION_RATIO)
+    removable_labels: list[int] = []
+
+    for label in range(1, component_count):
+        if label == main_label:
+            continue
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area > report["area_limit"]:
+            continue
+        component_mask = labels == label
+        if float(np.min(distance_to_main[component_mask])) <= protected_distance:
+            continue
+        removable_labels.append(label)
+
+    result = rgba_array.copy()
+    removal_mask = np.zeros((height, width), dtype=bool)
+    if removable_labels:
+        removal_mask = np.isin(labels, removable_labels)
+        result[removal_mask, :3] = background_rgb
+        result[removal_mask, 3] = 255
+        report["removed_components"] = len(removable_labels)
+        report["removed_pixels"] = int(np.count_nonzero(removal_mask))
+
+    if len(removable_labels) >= NOISY_BACKGROUND_MIN_REMOVED_COMPONENTS:
+        foreground_after_cleanup = foreground_mask.astype(bool) & ~removal_mask
+        _, background_labels = cv2.connectedComponents(
+            (~foreground_after_cleanup).astype(np.uint8),
+            connectivity=8,
+        )
+        exterior_labels = np.unique(
+            np.concatenate(
+                (
+                    background_labels[0, :],
+                    background_labels[-1, :],
+                    background_labels[:, 0],
+                    background_labels[:, -1],
+                )
+            )
+        )
+        exterior_background = np.isin(
+            background_labels,
+            exterior_labels[exterior_labels != 0],
+        )
+
+        kernel_size = round(min(height, width) * SILHOUETTE_OPENING_RATIO)
+        kernel_size = min(
+            MAX_SILHOUETTE_KERNEL_SIZE,
+            max(MIN_SILHOUETTE_KERNEL_SIZE, kernel_size),
+        )
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (kernel_size, kernel_size),
+        )
+        opened_foreground = cv2.morphologyEx(
+            foreground_after_cleanup.astype(np.uint8),
+            cv2.MORPH_OPEN,
+            kernel,
+        )
+        protrusion_mask = foreground_after_cleanup & ~opened_foreground.astype(bool)
+        protrusion_count, protrusion_labels, protrusion_stats, _ = (
+            cv2.connectedComponentsWithStats(
+                protrusion_mask.astype(np.uint8),
+                connectivity=8,
+            )
+        )
+        removable_protrusions: list[int] = []
+        adjacency_kernel = np.ones((3, 3), dtype=np.uint8)
+        for protrusion_label in range(1, protrusion_count):
+            area = int(protrusion_stats[protrusion_label, cv2.CC_STAT_AREA])
+            if area < MIN_PROTRUSION_AREA or area > report["area_limit"]:
+                continue
+            component_mask = protrusion_labels == protrusion_label
+            expanded_component = cv2.dilate(
+                component_mask.astype(np.uint8),
+                adjacency_kernel,
+                iterations=1,
+            ).astype(bool)
+            if np.any(expanded_component & exterior_background):
+                removable_protrusions.append(protrusion_label)
+
+        if removable_protrusions:
+            protrusion_removal_mask = np.isin(
+                protrusion_labels,
+                removable_protrusions,
+            )
+            result[protrusion_removal_mask, :3] = background_rgb
+            result[protrusion_removal_mask, 3] = 255
+            report["removed_protrusions"] = len(removable_protrusions)
+            report["removed_protrusion_pixels"] = int(
+                np.count_nonzero(protrusion_removal_mask)
+            )
+
+    report["applied"] = True
+    return result, report
+
+
 def choose_filter_speckle(
     transparency_analysis: dict,
     unique_colors: int,
+    isolated_cleanup: dict | None = None,
 ) -> int:
     """Escolhe uma limpeza maior para franjas opacas grandes e fragmentadas."""
+    has_detected_background_noise = (
+        isolated_cleanup is not None
+        and isolated_cleanup["applied"]
+        and isolated_cleanup["removed_components"]
+        >= NOISY_BACKGROUND_MIN_REMOVED_COMPONENTS
+    )
+    if has_detected_background_noise:
+        return NOISY_BACKGROUND_FILTER_SPECKLE
+
     visible_pixels = (
         transparency_analysis["opaque_pixels"]
         + transparency_analysis["semitransparent_pixels"]
@@ -135,16 +334,20 @@ def preprocess_colors(input_path: Path, output_path: Path) -> dict:
         rgba_image = ImageOps.exif_transpose(image).convert("RGBA")
         rgba_array = np.array(rgba_image, dtype=np.uint8)
 
-    neighbor_analysis = analyze_neighbor_differences(rgba_image)
-    transparency_analysis = analyze_transparency(rgba_image)
+    cleaned_array, isolated_cleanup = remove_isolated_background_speckles(
+        rgba_array
+    )
+    cleaned_image = Image.fromarray(cleaned_array, mode="RGBA")
+    neighbor_analysis = analyze_neighbor_differences(cleaned_image)
+    transparency_analysis = analyze_transparency(cleaned_image)
     filter_delta_e = estimate_filter_delta_e(neighbor_analysis)
     filter_applied = should_apply_bilateral_filter(neighbor_analysis)
     alpha_fringe_removed = should_remove_alpha_fringe(transparency_analysis)
 
     if alpha_fringe_removed:
-        working_array, removed_alpha_pixels = remove_low_alpha_fringe(rgba_array)
+        working_array, removed_alpha_pixels = remove_low_alpha_fringe(cleaned_array)
     else:
-        working_array = rgba_array.copy()
+        working_array = cleaned_array
         removed_alpha_pixels = 0
 
     if filter_applied:
@@ -164,6 +367,7 @@ def preprocess_colors(input_path: Path, output_path: Path) -> dict:
     filter_speckle = choose_filter_speckle(
         transparency_analysis,
         original_unique_colors,
+        isolated_cleanup,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -172,6 +376,7 @@ def preprocess_colors(input_path: Path, output_path: Path) -> dict:
     return {
         "filter_applied": filter_applied,
         "filter_delta_e": filter_delta_e,
+        "isolated_cleanup": isolated_cleanup,
         "alpha_fringe_removed": alpha_fringe_removed,
         "removed_alpha_pixels": removed_alpha_pixels,
         "dark_normalization": dark_normalization,
@@ -222,6 +427,14 @@ def main() -> None:
     print(f"Limite adaptativo usado: Delta E {result['filter_delta_e']:.2f}")
     filter_passes = 1 if result["filter_applied"] else 0
     print(f"Passagens do filtro: {filter_passes}")
+    isolated = result["isolated_cleanup"]
+    isolated_status = "sim" if isolated["applied"] else "nao"
+    print(f"Limpeza de fundo uniforme aplicada: {isolated_status}")
+    print(
+        "Fragmentos isolados removidos: "
+        f"{isolated['removed_components']} "
+        f"({isolated['removed_pixels']:,} pixels)"
+    )
     print(f"Limpeza minima de regioes: {result['filter_speckle']} pixels")
     print(f"Pixels alterados: {result['changed_pixels']:,}")
     print(

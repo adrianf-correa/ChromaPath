@@ -22,11 +22,16 @@ A primeira tolerância adaptativa também foi implementada. Ela escolheu Delta E
 1 para o cubo, 7 para Perflex e Mickey e 8 para a vaca, produzindo arquivos
 idênticos aos quatro resultados anteriormente aprovados.
 
+A primeira limpeza adaptativa de pequenas regiões também foi concluída. Em um
+par controlado de mascotes limpo e ruidoso, ambos terminaram com 17 caminhos e
+cinco cores. A regra só atua quando encontra um fundo uniforme e evidência
+suficiente de resíduos, preservando a versão limpa sem alterações.
+
 ## Próximo incremento
 
-Validar a tolerância adaptativa com novas imagens e começar a detectar pequenas
-regiões, distinguindo ruído de detalhes relevantes. A referência Delta E 8 será
-mantida provisoriamente como proteção enquanto o conjunto de testes cresce.
+Validar em uma nova imagem a combinação entre a tolerância de cores e a limpeza
+de pequenas regiões. A referência Delta E 8 será mantida provisoriamente como
+proteção enquanto o conjunto de testes cresce.
 
 ## Por que o comparador veio primeiro
 
