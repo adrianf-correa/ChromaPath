@@ -87,6 +87,15 @@ forma, o programa não reduz todas as entradas ao mesmo número de cores.
 
 ## Ferramentas de desenvolvimento
 
+Para gerar e medir lado a lado o VTracer direto e o pipeline completo:
+
+```powershell
+python -m src.comparison "samples/minha-imagem.png"
+```
+
+Os dois SVGs são armazenados em `outputs/comparisons/`, acompanhados no terminal
+pela quantidade de caminhos, cores de preenchimento e tamanho de cada arquivo.
+
 O analisador mostra as cores dominantes, suas frequências, distâncias
 perceptuais, variações entre pixels vizinhos e informações de transparência:
 

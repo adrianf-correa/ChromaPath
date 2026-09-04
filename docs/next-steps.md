@@ -2,9 +2,9 @@
 
 Este é o ponto de retomada definido em 4 de setembro de 2026.
 
-## Próximo incremento
+## Incrementos concluídos
 
-Criar um comparador automático para avaliar uma imagem com os dois fluxos:
+Foi criado um comparador automático para avaliar uma imagem com os dois fluxos:
 
 1. gerar um SVG diretamente com o VTracer;
 2. gerar outro SVG com o pipeline completo do ChromaPath;
@@ -12,12 +12,21 @@ Criar um comparador automático para avaliar uma imagem com os dois fluxos:
 4. salvar os resultados lado a lado em `outputs/`;
 5. apresentar um relatório curto no terminal.
 
-Essa ferramenta será destinada ao desenvolvimento. O fluxo principal continuará
+Essa ferramenta é destinada ao desenvolvimento. O fluxo principal continua
 simples, recebendo somente a imagem e produzindo o SVG final.
 
-## Por que fazer isso primeiro
+O comparador também foi executado sobre os quatro casos locais. A linha de base
+com caminhos, cores e tamanho foi registrada em `docs/experiments.md`.
 
-O comparador criará uma referência repetível para avaliar mudanças futuras. Com
+## Próximo incremento
+
+Iniciar a tolerância adaptativa de agrupamento das cores do SVG. O objetivo é
+substituir o limite único de Delta E 8 por uma decisão derivada da distribuição
+de cores de cada resultado, sem exigir um número fixo de cores.
+
+## Por que o comparador veio primeiro
+
+O comparador cria uma referência repetível para avaliar mudanças futuras. Com
 ele, poderemos melhorar uma imagem e verificar se vaca, Logo Perflex, cubo mágico
 e Mickey sofreram regressões, sem depender somente da memória visual.
 

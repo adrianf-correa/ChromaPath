@@ -18,6 +18,23 @@ Cada imagem foi escolhida para revelar um tipo diferente de problema:
 | Cubo mágico | Transparência, bordas externas e gradientes | Limpeza de franjas sem simplificar excessivamente as faces |
 | Mickey | Muitas cores e uma franja externa totalmente opaca | Remoção adaptativa de fragmentos e preservação dos contornos |
 
+## Linha de base do comparador
+
+Em 4 de setembro de 2026, os quatro casos foram processados pelo comparador. A
+baseline utiliza a imagem original diretamente na integração com o VTracer, sem
+o pré-processamento e a simplificação final de cores do ChromaPath.
+
+| Caso | Baseline: caminhos / cores / tamanho | ChromaPath: caminhos / cores / tamanho | Redução de caminhos | Redução de cores |
+| --- | --- | --- | ---: | ---: |
+| Vaca | 55 / 47 / 104,1 KB | 43 / 8 / 101,9 KB | 21,8% | 83,0% |
+| Logo Perflex | 11 / 10 / 7,6 KB | 11 / 4 / 7,6 KB | 0% | 60,0% |
+| Cubo mágico | 397 / 168 / 291,7 KB | 29 / 5 / 138,1 KB | 92,7% | 97,0% |
+| Mickey | 131 / 126 / 145,3 KB | 31 / 7 / 84,2 KB | 76,3% | 94,4% |
+
+Menos caminhos e cores normalmente tornam o SVG mais compacto e editável, mas
+esses números não comprovam sozinhos uma melhora visual. Toda alteração do
+pipeline deve combinar as métricas com a inspeção dos contornos e detalhes.
+
 ## Vaca
 
 A primeira passagem de pré-processamento reduziu o SVG de 109 para 46 caminhos
