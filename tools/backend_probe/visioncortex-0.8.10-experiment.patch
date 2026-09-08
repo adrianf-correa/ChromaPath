@@ -1,0 +1,81 @@
+--- a/src/color_clusters/builder.rs
++++ b/src/color_clusters/builder.rs
+@@ -451,6 +451,55 @@
+ 
+             infos.sort_by_key(|info| info.diff as i64 * 65535 + info.index.0 as i64);
+ 
++            // CHROMAPATH experiment: prevent differently colored one-pixel
++            // boundary threads from joining around an object before absorption.
++            // Same-color coalescence and the existing speckle/deepen rules stay.
++            if std::env::var("CHROMAPATH_PATCH").as_deref() == Ok("solid-neighbour")
++                && infos[0].diff > 0
++                && mycluster.perimeter_internal(self) as usize >= mycluster.area()
++            {
++                let nearest = self.get_cluster(infos[0].index);
++                if nearest.perimeter_internal(self) as usize >= nearest.area() {
++                    let solid: Vec<usize> = infos.iter().enumerate().filter_map(|(i, info)| {
++                        let neighbour = self.get_cluster(info.index);
++                        ((neighbour.perimeter_internal(self) as usize) < neighbour.area()).then_some(i)
++                    }).collect();
++                    if solid.len() >= 2 {
++                        infos.swap(0, solid[0]);
++                    }
++                }
++            }
++
++            // Second isolated hypothesis: shared boundary, not just one pixel
++            // of adjacency, determines absorption of a rejected thin region.
++            if std::env::var("CHROMAPATH_PATCH").as_deref() == Ok("boundary-contact")
++                && infos[0].diff > 0
++                && mycluster.perimeter_internal(self) as usize >= mycluster.area()
++            {
++                let mut contacts = vec![0usize; infos.len()];
++                for &pixel in &mycluster.indices {
++                    let x = pixel % self.width;
++                    let y = pixel / self.width;
++                    let adjacent = [
++                        (x > 0).then(|| pixel - 1),
++                        (x + 1 < self.width).then(|| pixel + 1),
++                        (y > 0).then(|| pixel - self.width),
++                        (y + 1 < self.height).then(|| pixel + self.width),
++                    ];
++                    for other in adjacent.into_iter().flatten() {
++                        let label = self.cluster_indices[other as usize];
++                        if let Some(i) = infos.iter().position(|info| info.index == label) {
++                            contacts[i] += 1;
++                        }
++                    }
++                }
++                let mut best = 0;
++                for i in 1..contacts.len() {
++                    if contacts[i] > contacts[best] { best = i; }
++                }
++                infos.swap(0, best);
++            }
++
+             let target = infos[0].index;
+ 
+             let deepen = if self.hierarchical == HIERARCHICAL_MAX {
+@@ -459,6 +508,21 @@
+                 false
+             };
+             let hollow = (self.hollow)(self, self.get_cluster(index), &infos);
++
++            // CHROMAPATH: observation only; no decisions changed.
++            if std::env::var_os("CHROMAPATH_PROBE_LOG").is_some() {
++                let watch: u32 = std::env::var("CHROMAPATH_WATCH").unwrap_or_default().parse().unwrap_or(u32::MAX);
++                let source = self.get_cluster(index);
++                let dest = self.get_cluster(target);
++                let watched = source.indices.contains(&watch) || dest.indices.contains(&watch);
++                if watched || source.area() >= 64 {
++                    let neighbours = infos.iter().map(|n| format!("[{},{}]", n.index.0, n.diff)).collect::<Vec<_>>().join(",");
++                    eprintln!("{{\"event\":\"merge\",\"from\":{},\"area\":{},\"perimeter\":{},\"color\":\"{}\",\"to\":{},\"target_area\":{},\"target_color\":\"{}\",\"deepen\":{},\"hollow\":{},\"watch_from\":{},\"watch_to\":{},\"neighbours\":[{}]}}",
++                        index.0, source.area(), source.perimeter_internal(self), source.color().to_hex_string(),
++                        target.0, dest.area(), dest.color().to_hex_string(), deepen, hollow,
++                        source.indices.contains(&watch), dest.indices.contains(&watch), neighbours);
++                }
++            }
+ 
+             if deepen {
+                 self.clusters_output.push(index);
+

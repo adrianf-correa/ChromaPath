@@ -1,0 +1,30 @@
+{
+  "vtracer-0.6.15.tar.gz": {
+    "url": "https://files.pythonhosted.org/packages/e4/62/c3c23511ebe3d76dc679db0bb045dfd20ed3452bec12dcbbe8d655498a7d/vtracer-0.6.15.tar.gz",
+    "sha256": "f7f39943d1fc8e9dc82f5360a40e941aaf4c9166d8df30c3f6a2da8cc21dfc52",
+    "directory": "vtracer-0.6.15"
+  },
+  "visioncortex-0.8.10.crate": {
+    "url": "https://static.crates.io/crates/visioncortex/visioncortex-0.8.10.crate",
+    "sha256": "7c9a7e6cc136c7c79b4adbd311c46c323a19db7baf446822b5f90f84375934e3",
+    "directory": "visioncortex-0.8.10"
+  },
+  "vtracer-1.0.0a3.tar.gz": {
+    "url": "https://files.pythonhosted.org/packages/ef/fb/54ab0e5436a5c1660d935ee417e12cb981e65c9300ffb9ad8b9f98472adb/vtracer-1.0.0a3.tar.gz",
+    "sha256": "9eb224154ab2977671b4ca6005c94f756826a4bf9d9be38ba3e2e123488d37a1",
+    "directory": "vtracer-1.0.0a3",
+    "alpha": true
+  },
+  "visioncortex-0.9.1.crate": {
+    "url": "https://static.crates.io/crates/visioncortex/visioncortex-0.9.1.crate",
+    "sha256": "5db1b0cbb66003ce159c835969e4c11b83bbaf648f4567568485e10ff7e61efc",
+    "directory": "visioncortex-0.9.1",
+    "alpha": true
+  },
+  "vtracer-1.0.0a3-cp38-abi3-win_amd64.whl": {
+    "url": "https://files.pythonhosted.org/packages/0d/21/0c92a34c52f153f3cd60c68345aed0d21107bc27a652b719577e369802f6/vtracer-1.0.0a3-cp38-abi3-win_amd64.whl",
+    "sha256": "0685916b1c9bddaaf3203080416082b9f49df3a52e53f13c69595eaf9af2e709",
+    "directory": "v1-python",
+    "alpha": true
+  }
+}

@@ -394,3 +394,216 @@ aprovados** na suíte completa. A hipótese
 de borda não foi promovida a correção: a causa foi localizada e as alternativas
 simples foram descartadas com evidência. O próximo passo deve investigar a
 filtragem interna do backend fixado, não retunar cores ou aumentar suavização.
+
+## 2026-09-08 — Segmentação interna: causa confirmada, patches rejeitados
+
+### Decisão: categoria B, sem mudança de produção
+
+A causa foi localizada e observada em execução. Duas mudanças pequenas na escolha
+do vizinho não atenderam aos critérios de segurança. A versão nova tem um modo que
+melhora este defeito específico, mas também falhou nas regressões. **Não manter os
+patches como correção, não migrar e não compensar o problema com cores.**
+
+Isso não prova que todo patch pequeno possível falharia. Prova que as duas regras
+locais ensaiadas são insuficientes; uma solução segura ainda precisa tratar a
+atribuição espacial da faixa, em vez de simplesmente escolher outro destino para
+a região inteira. Não iniciar uma fork grande com base só neste experimento.
+
+### Estado, fontes e controle
+
+- Partida limpa no commit `6bc8579`; 43 testes aprovados antes da investigação.
+- Baseline novamente produzida em `outputs/geometry/backend-source-baseline/`.
+  Mesmo `seam`, tamanhos 96/192/384, fases 0/0,5, render 4×, filtro 4, spline,
+  stacked, precisão de cor 5, quina 45, layer 16, comprimento 4, splice 45,
+  10 iterações e precisão de coordenadas `None`.
+- Fonte exato: sdist do [pacote Python 0.6.15](https://pypi.org/project/vtracer/0.6.15/),
+  cujo `cmdapp` é o núcleo Rust **0.6.12**, com **visioncortex 0.8.10** no Cargo.lock.
+  Não confundir o número do pacote Python com o comentário do SVG.
+- URLs e SHA256 de cada arquivo em `tools/backend_probe/sources.json`. O Cargo.lock
+  da sonda fixa todas as suas dependências transitivas nas versões/checksums do
+  lock original. Nenhuma consulta a `master` foi usada como fonte equivalente.
+- Sonda Rust 1.90.0 compilada para WASI, executada por Node 24.19.0. Sharp 0.35.4 /
+  librsvg 2.62.91; Python 3.12.14, Pillow 12.3.0, NumPy 2.5.2, OpenCV 5.0.0.93.
+  Cada ensaio registra suas versões. Toolchain e fontes ficam isolados em outputs.
+- Com o patch experimental desligado, o SVG da sonda é **byte a byte idêntico ao
+  retorno UTF-8 da API nativa nos 24 casos geométricos**, antes da conversão LF/CRLF
+  na gravação pelo Windows. Não foi usado um tracer aproximado como controle.
+
+### Caminho concreto dos pixels ao SVG
+
+As referências abaixo são relativas às fontes verificadas, não aos arquivos Python
+do ChromaPath. A sonda também salva a imagem segmentada, antes de gerar curvas.
+
+1. `cmdapp/src/python.rs::convert_pixels_to_svg` cria `ColorImage` e passa por
+   `construct_config` → `converter.rs::convert` → `Config::into_converter_config`.
+   **O filtro é elevado ao quadrado: 4 significa área 16**, não quatro pixels.
+2. `converter.rs::color_image_to_svg` aplica keying de transparência quando cabível
+   e chama `color_clusters::Runner`. No caso seam, todos os pixels são opacos.
+3. `runner.rs::Runner::builder` configura as funções `same`, `diff`, `deepen` e
+   `hollow`. `BuilderImpl::stage_1` agrupa pixels com a comparação RGB quantizada.
+   `prepare_stage_2` inicializa médias/resíduos e ordena regiões por área.
+4. `builder.rs::BuilderImpl::stage_2` obtém adjacências de quatro vizinhos via
+   `Cluster::neighbours_internal`, calcula `runner.rs::color_diff` (**distância
+   RGB L1, não Delta E**) e ordena os candidatos por diferença/ID. O primeiro é
+   escolhido como destino. A decisão não considera a extensão da fronteira comum.
+5. A função `runner.rs::patch_good` decide se uma região pode sobreviver como
+   camada. Exige `good_min_area < area < good_max_area`. Com filtro positivo,
+   exige também `perimeter < area`. O perímetro é o número de pixels de borda da
+   máscara binária, não comprimento vetorial. **Uma faixa de um pixel de espessura
+   tem perímetro igual à área e é rejeitada mesmo tendo centenas de pixels.**
+   Ainda é necessário que a diferença ao vizinho ultrapasse `deepen_diff`.
+6. Quando `deepen=false`, `merge_cluster_into` transfere `residue_sum` ao destino
+   e chama `combine_clusters`: reatribui todos os `cluster_indices`, transfere
+   todos os índices dos pixels e agrega soma de cores/retângulo. A origem fica
+   vazia. Seus pixels não viram transparência: **o vizinho escolhido os herda**.
+   Isso muda área, média e adjacências das próximas decisões.
+7. Quando `deepen=true`, a região é registrada em `clusters_output` e preservada
+   como camada, mesmo sendo agregada ao ancestral por `combine_clusters_clone`.
+   `hollow` registra os índices dos furos quando existe só um vizinho.
+8. `color_image_to_svg` percorre `clusters_output` em ordem inversa.
+   `Cluster::to_compound_path` cria a máscara com `to_image_with_hole(..., false)`,
+   extrai componentes/contornos e ajusta as curvas. `SvgFile` usa `residue_color`
+   como preenchimento. O empilhamento mostra o coral onde a faixa já foi absorvida;
+   ele não inventa essa atribuição durante a serialização.
+
+### Evidência observada: a região longa é realmente fundida
+
+Em `seam-192-phase0.5`, acompanhamos o pixel `(20,40)`, índice 7700. Logs completos:
+`outputs/backend-investigation/geometry-v1/seam-192-phase0.5/control.jsonl`.
+
+| Origem | Área / perímetro | Cor média | Destino | Decisão |
+| --- | ---: | --- | --- | --- |
+| 555 | 1 / 1 | `#899EB4` | 499, mesma cor | merge sem camada |
+| 196 | 75 / 75 | `#899DB3` | 499, então com 229 pixels | merge sem camada |
+| 499 | 304 / 304 | `#899EB4` | 502, com 304 pixels, `#BC827E` | merge sem camada |
+| 502 | 608 / 608 | `#A29099` | 426, com 11.406 pixels, `#EE6448` | merge sem camada |
+| 348, azul | 11.395 / 451 | `#143D68` | ancestral 426 | preservado como camada |
+
+No merge 499→502, as diferenças ordenadas são 133 para 502, 267 para o coral
+426 e 290 para branco/azul. Depois da fusão das faixas, 502→426 tem diferenças
+201 para coral, 274 para azul e 306 para branco. A média e a nova adjacência
+propagam a atribuição incorreta. A camada coral final tem resíduo `#EA674C`.
+
+Hipótese confirmada: **quando faixas finas antialiased de fronteiras diferentes
+se tornam uma região comum, a rejeição de regiões finas impede que sobrevivam
+como camadas; a seleção global por cor transfere a faixa inteira a um vizinho,
+cuja área passa a alcançar bordas que deveriam pertencer ao azul/branco.**
+
+Na imagem segmentada, antes do ajuste de curvas, já existem 192 px² de coral
+indevido nas ROIs externas; após o tracing, a medida é 183,25 px². Entrada e
+pré-processamento continuam iguais. Não é só suavização ou pós-processamento.
+
+### Dois patches mínimos, uma variável por experimento
+
+O patch pequeno fica em `tools/backend_probe/visioncortex-0.8.10-experiment.patch`,
+aplicado somente à fonte ignorada em outputs. As duas opções são mutuamente
+exclusivas e não mudam `patch_good`, filtro, Delta E ou parâmetros das curvas.
+
+- `solid-neighbour`: para uma faixa fina cujo vizinho mais próximo também é fino,
+  prefere o sólido mais próximo quando há ao menos dois sólidos. Mantém merges
+  de cor idêntica. **Insuficiente:** o coral ainda pode ser o sólido de menor
+  distância global; a maior parte da franja permanece.
+- `boundary-contact`: para faixa fina e distância não nula, prefere o vizinho com
+  maior contato de quatro vizinhos. **Rejeitado:** reduz a franja, mas não a zera
+  e muda a propriedade de pontas/diagonais. Também altera o resíduo branco.
+
+Área de coral indevido, em px² da entrada, medida nas mesmas ROIs a 4×:
+
+| Tamanho, fase 0,5 | Controle | Sólido | Contato | Alpha tradicional | Alpha watershed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 96 | 96,000 | 81,000 | 4,438 | 96,000 | 0 |
+| 192 | 183,250 | 162,000 | 8,875 | 183,250 | 0 |
+| 384 | 363,375 | 326,375 | 17,750 | 363,375 | 0 |
+
+Nas três fases zero, todas as opções têm zero de coral externo. Isso, sozinho,
+não significa geometria correta. Em `tips-96-phase0.5`, o patch por contato
+piora o máximo da silhueta de **2,828 para 6 px**. Há aumento desse máximo em
+13/24 casos. Em 192/fase0,5, controle e dois patches continuam com **3 paths e
+3 cores**, apesar das geometrias diferentes: contagens não detectariam o defeito.
+
+### Versão nova: melhora específica, não uma migração aprovada
+
+Foi testada a wheel oficial Windows x64 **1.0.0a3**, com núcleo Rust
+**1.0.0-alpha.3** e visioncortex **0.9.1**, em outro processo Python. Fontes,
+wheel e SHA256 estão no mesmo manifesto; requirements e ambiente do produto
+permaneceram intactos.
+
+O [release 1.0.0-alpha.3](https://github.com/visioncortex/vtracer/releases/tag/1.0.0-alpha.3)
+registra uma correção de filamentos no watershed. Ela não é uma correção do
+`color-cluster` tradicional. Inspecionamos o fonte distribuído: no modo clássico,
+`frontend/color_cluster.rs::ColorClusterFrontend::prepare` configura o mesmo
+Runner, `patch_good` mantém a rejeição por perímetro e `stage_2` continua escolhendo
+o vizinho por diferença RGB antes de agregar toda a região. Isso explica por que
+a franja medida ficou exatamente igual nas seis fixtures.
+
+O novo `frontend/watershed.rs` implementa outra segmentação:
+`WatershedHierarchy::build` constrói a hierarquia do grafo de pixels;
+`cut` corta por persistência, chama `snap_boundaries`, reconstrói adjacências e
+usa `absorb_small`. `snap_boundaries` reatribui **pixels de fronteira** com base
+nos flancos locais e chama `absorb_fragments` para fragmentos desconectados.
+Não equivale a trocar duas linhas no clusterizador antigo.
+
+Os dois modos foram executados com quinas 45, filtro 4, spline/stacked e sem nova
+otimização ou simplificação de curvas. No watershed, `detail=128` é o padrão do
+novo frontend, sem equivalência direta com `color_precision=5`. Não retunamos
+nenhum desses valores. O pós-processamento ChromaPath é o mesmo; nas seis seams,
+as medidas de franja **bruta e final são iguais**, portanto o coral não foi
+escondido pela simplificação de cores.
+
+Resultados e limites:
+
+- Watershed zera o coral indevido nas seis seams e não cria fresta branca na ROI
+  interna da emenda. Entretanto, mantém faixas intermediárias visíveis na borda;
+  zero coral não significa eliminação de todos os resíduos geométricos/cromáticos.
+- Em 192/fase0,5, passa de 3 paths/3 fills/1.837 bytes para **17/7/5.580**. Alguns
+  fills pertencem a ancestrais sobrepostos: contagem de fills não é contagem de
+  tons visíveis. A inspeção visual também confirmou faixas intermediárias.
+- Nas 24 geometrias, a área de divergência aumenta em **11 casos**. O máximo da
+  silhueta aumenta em 2: arcs-384/fase0,5 (0,901→1,031 px) e diagonals-96/fase0
+  (0,750→1,118 px). Não reduzir os critérios para aprovar essa troca.
+- Repetidos os 12 casos anteriores. Modo clássico alpha: mesmas contagens e
+  nenhuma diferença RGB maior que 8; 8 renders exatamente iguais e 4 com
+  diferenças muito pequenas de rasterização/serialização. Não afirmar identidade
+  byte a byte entre versões diferentes.
+- Watershed: cubo 29→36 paths, Perflex 11→36, Mickey 31→33, vaca 43→36. Mais
+  importante, no cubo o RGBA `(0,0,0,0)` do fundo preparado vira **preto opaco**,
+  enquanto o controle renderizado sobre branco é branco. A implementação
+  watershed não aplica o keying de transparência do frontend clássico.
+- Losangos repetidos e estrela única seguem presentes; os respectivos pares
+  limpo/ruidoso produzem SVGs idênticos entre si no watershed, mas com mudança de
+  cores/contornos em relação ao controle. No robô, o novo modo produz 36 paths/12
+  fills no limpo e 22/6 no ruidoso, contra 17/5 nos dois controles. Igualdade de
+  contagens no controle não implica que esses dois SVGs antigos sejam idênticos.
+- As diferenças de imagens reais medem mudança, não fidelidade: não temos
+  referência vetorial exata para elas. A perda de transparência, por outro lado,
+  é uma regressão objetiva e suficiente para bloquear migração automática.
+
+### Teste e reprodutibilidade
+
+`tools/check_backend_fringe.py` verifica ocupação de coral nas ROIs e rejeita
+resultados sem uma das regiões principais. Executado contra as rasterizações
+de 192/fase0,5: **controle falha (exit 1, 183,25 px²); watershed passa (exit 0)**.
+É um critério específico da franja, não aprovação global do backend novo.
+
+Quatro testes adicionais em `tests/test_backend_fringe.py` verificam a aprovação
+do caso limpo, detecção de faixa longa sem mudar a paleta, rejeição de regiões
+apagadas e detecção de um único pixel na grade 4×. **47 testes passaram** na suíte
+completa. Nenhuma falha conhecida foi disfarçada de correção de produção.
+
+Artefatos desta sessão (outputs ignorados; scripts e patch versionáveis):
+
+- `outputs/backend-investigation/geometry-v1/report.json`: 24 casos, controle
+  original, candidatos, logs e máscaras antes das curvas.
+- `outputs/backend-investigation/alpha3-final/report.json`: mesmos 24 casos na
+  alpha, dois frontends, incluindo comparação da franja bruta/final.
+- `outputs/backend-investigation/regressions-control/report.json`: 12 casos e
+  **36 SVGs de produção novamente idênticos byte a byte à baseline anterior**.
+- `outputs/backend-investigation/regressions-alpha3/report.json`: comparação
+  de renders, contagens e limpeza/detalhes nas duas opções da alpha.
+- [Instruções completas da sonda](../tools/backend_probe/README.md): fontes
+  verificadas, compilação isolada, logs, ensaios e comandos do teste vermelho/verde.
+
+`src/`, `main.py`, `requirements.txt` e os parâmetros do produto não foram
+alterados. Não houve commit nem push automático. Próxima investigação: formular
+uma atribuição **local** da faixa fina, com teste de topologia e cobertura, antes
+de permitir sua absorção global; não repetir os dois seletores já rejeitados.

@@ -55,32 +55,53 @@ ou hierarquia não resolveu. Normalizar misturas na borda externa também foi
 testado e rejeitado por piorar silhuetas e diagonais. Não repetir essas trocas
 como se fossem correções ainda não testadas.
 
-**Próximo trabalho exato: investigar a filtragem interna do backend fixado.**
+**Investigação interna concluída em 08/09: causa confirmada, categoria B.**
 
-1. Partir de `tools/fringe_experiment.py` e dos relatórios `fringe-final`/`fringe-final8`
-   documentados em `docs/experiments.md`. Manter o controle de produção.
-2. Obter e inspecionar as fontes correspondentes ao pacote Python 0.6.15 e às
-   dependências Rust efetivamente usadas; não usar `master` como equivalente.
-3. Localizar por que um limite de fragmentos tão pequeno altera a cobertura de
-   uma borda longa. Separar descarte de clusters, atribuição de cores e
-   empilhamento dos caminhos. A etapa externa foi localizada, não essa função
-   interna; ainda não afirmar qual desses mecanismos é o culpado.
-4. Se houver correção pequena viável, testar em isolamento contra a mesma
-   baseline. Se depender de mudança significativa do backend, comparar uma
-   versão nova em ambiente separado antes de propor migração; não atualizar
-   `requirements.txt` automaticamente.
-5. Exigir redução da franja sem novos tons/resíduos, sem frestas e sem piorar
-   silhueta, pontas ou diagonais. Repetir os 24 casos geométricos, os 43 testes
-   e os 36 SVGs anteriores antes de considerar qualquer alteração de produção.
+O pacote Python 0.6.15 usa núcleo Rust 0.6.12 e visioncortex 0.8.10. Em
+`runner.rs::patch_good`, filtro positivo também rejeita faixas finas cujo
+perímetro é igual à área, mesmo que tenham centenas de pixels. Em
+`BuilderImpl::stage_2`, a escolha global por cor e `merge_cluster_into` fundem
+a faixa inteira ao vizinho. A cadeia observada foi 304→608 pixels→coral.
+A franja já existe no mapa segmentado, antes das curvas.
 
-O ensaio padrão foi repetido sem diferenças nos SVGs de controle. A suíte
-atual tem **43 testes aprovados** e os 36 SVGs anteriores seguem byte a byte
-iguais. O candidato `tools/edge_mixture.py` existe apenas para reprodução da
-hipótese rejeitada; não o conectar ao pré-processamento de produção.
+Dois patches isolados foram testados nas 24 geometrias e rejeitados: preferir
+vizinho sólido mantém a franja; preferir maior contato reduz o defeito, mas piora
+pontas/diagonais (até 6 px de erro máximo). Não promover nenhum deles ao produto.
+
+A alpha 1.0.0a3 também foi avaliada separadamente: o frontend clássico mantém
+a franja; watershed zera o coral externo, mas muda outras geometrias e transforma
+o fundo transparente do cubo em preto opaco. **Não migrar automaticamente.**
+Zerar o coral não eliminou todas as faixas intermediárias da borda.
+
+**Próximo trabalho exato: propriedade local da faixa fina, antes do merge.**
+
+1. Retomar `tools/backend_probe/README.md` e os relatórios `geometry-v1`,
+   `alpha3-final` e `regressions-alpha3` em `outputs/backend-investigation`.
+   A sonda com o candidato desligado deve continuar igual ao controle nativo.
+2. Usar `seam-192-phase0.5`, pixel `(20,40)` e cadeia de regiões 499→502→426.
+   Investigar como separar trechos de uma faixa que tocam pares de regiões
+   diferentes, preservando a cobertura local antes de decidir sua absorção.
+   Não repetir a simples troca de destino global já rejeitada.
+3. Antes de implementar uma solução maior, criar contraexemplos com faixa de
+   antialias, linha fina legítima, ponta e junção de três regiões. A regra deve
+   preservar detalhes e topologia sem desativar a limpeza de speckles.
+4. Exigir zero no teste geométrico `tools.check_backend_fringe`, mas também
+   ausência de novos resíduos/frestas e não piora de silhuetas, pontas, diagonais,
+   cores e transparência. Repetir as 24 geometrias, suíte e casos anteriores.
+5. Se isso exigir reescrever a segmentação, parar antes de criar uma fork grande
+   e levar a reprodução mínima à discussão de solução upstream (não enviar nada
+   automaticamente). Watershed fica como alternativa experimental com os bloqueios
+   documentados; não é uma correção pronta para incorporar.
+
+A suíte atual tem **47 testes aprovados** e os **36 SVGs anteriores seguem byte
+a byte iguais**. Nenhum arquivo de produção foi alterado nesta investigação.
+Os candidatos em `tools/edge_mixture.py` e no patch da sonda existem somente
+para reprodução das hipóteses rejeitadas; não conectá-los ao produto.
 
 Os comprimentos 6–10 ficam para uma rodada posterior com mais curvas pequenas
 e casos reais. A referência de cor Delta E 8, quinas 45 e VTracer 0.6.15 continuam
-mantidos; investigar VTracer 1.0 separadamente, sem misturar as causas.
+mantidos. Uma futura avaliação da versão nova deve partir dos bloqueios já
+medidos, sem repetir a consulta de existência da versão como se fosse novidade.
 
 ## Por que o comparador veio primeiro
 

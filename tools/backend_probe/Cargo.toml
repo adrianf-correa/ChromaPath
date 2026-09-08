@@ -1,0 +1,11 @@
+[package]
+name = "chromapath-backend-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+visioncortex = "=0.8.10"
+
+[patch.crates-io]
+visioncortex = { path = "../../outputs/backend-investigation/visioncortex-0.8.10" }
