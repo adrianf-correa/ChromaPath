@@ -1,6 +1,6 @@
 # Próximas etapas do ChromaPath
 
-Este é o ponto de retomada definido em 4 de setembro de 2026.
+Este é o ponto de retomada atualizado em 8 de setembro de 2026.
 
 ## Incrementos concluídos
 
@@ -8,9 +8,10 @@ Foi criado um comparador automático para avaliar uma imagem com os dois fluxos:
 
 1. gerar um SVG diretamente com o VTracer;
 2. gerar outro SVG com o pipeline completo do ChromaPath;
-3. contar caminhos, cores de preenchimento e tamanho dos dois arquivos;
-4. salvar os resultados lado a lado em `outputs/`;
-5. apresentar um relatório curto no terminal.
+3. preservar também a etapa preparada, antes da simplificação final das cores;
+4. contar caminhos, cores de preenchimento e tamanho dos três arquivos;
+5. salvar os resultados lado a lado em `outputs/`;
+6. apresentar um relatório curto no terminal.
 
 Essa ferramenta é destinada ao desenvolvimento. O fluxo principal continua
 simples, recebendo somente a imagem e produzindo o SVG final.
@@ -37,9 +38,31 @@ idênticas byte por byte.
 
 ## Próximo incremento
 
-Iniciar a fase de geometria com experimentos controlados de curvas, quinas e
-microdegraus. A referência Delta E 8 será mantida provisoriamente como proteção
-enquanto o conjunto de testes cresce.
+A primeira rodada de geometria foi concluída sem alterar o comportamento do
+produto. O [ensaio](geometry.md) tem 24 entradas controladas e seis ajustes.
+Comprimento 10 reduz 25,8% dos segmentos no total, mas piora alguns detalhes
+locais; união de curvas a 60 cria uma franja adicional e foi rejeitada como
+padrão geral. Não implementar uma regra por resolução ou número de cores com
+base apenas nesses resultados. Os 37 testes passaram e os 36 SVGs da comparação
+anterior ficaram byte a byte iguais. Detalhes em [experimentos](experiments.md).
+
+**Próximo trabalho exato: isolar a origem da franja subpixel da fixture `seam`.**
+
+1. Reproduzir a cena em 96, 192 e 384 pixels, fases 0 e 0,5, com os parâmetros
+   atuais e o renderizador registrado no ensaio.
+2. Medir separadamente raster de entrada, raster preparado, SVG preparado e
+   SVG final. Identificar a primeira etapa que introduz coral na borda azul.
+3. Criar uma região de medição da borda externa, além da faixa interna já
+   existente. Medir extensão/área da franja sem confundi-la com fresta branca
+   ou erro da silhueta.
+4. Só então experimentar uma correção pequena na etapa responsável. Critérios:
+   reduzir a franja, não abrir frestas e não piorar pontas/círculos locais.
+5. Repetir o ensaio completo, os testes e o comparador dos casos aprovados antes
+   de considerar mudar o comportamento de produção.
+
+Os comprimentos 6–10 ficam para uma rodada posterior com mais curvas pequenas
+e casos reais. A referência de cor Delta E 8, quinas 45 e VTracer 0.6.15 continuam
+mantidos; investigar VTracer 1.0 separadamente, sem misturar as causas.
 
 ## Por que o comparador veio primeiro
 

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 outputs/
+node_modules/
 samples/*
 !samples/README.md
 !samples/fixtures/

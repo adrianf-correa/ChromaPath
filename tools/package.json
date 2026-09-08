@@ -1,0 +1,6 @@
+{
+  "name": "chromapath-geometry-diagnostics",
+  "private": true,
+  "description": "Optional renderer for controlled geometry experiments only",
+  "dependencies": { "sharp": "0.35.4" }
+}

@@ -194,3 +194,113 @@ avaliados.
 - Uma mesma regra não deve ser calibrada para funcionar em apenas uma imagem.
 - Métricas ajudam a comparar resultados, mas a inspeção visual continua
   necessária durante esta fase do projeto.
+
+## 08/09/2026 — geometria: complexidade não basta
+
+### Hipótese e controle
+
+Aumentar o comprimento dos segmentos ou o ângulo de união das curvas poderia
+reduzir complexidade sem prejudicar o desenho. Um ensaio anterior já sugeria
+redução de bytes, mas não tinha referência geométrica suficiente para decisão.
+
+Antes de qualquer alteração, o Git estava limpo em `5d57204`; os 25 testes
+passaram. O comparador existente rodou sobre os seis arquivos locais e os seis
+arquivos públicos, salvando 36 SVGs e seus hashes em
+`outputs/geometry-baseline-20260908/`. Nenhum arquivo aprovado foi sobrescrito.
+
+Foi criado um [ensaio reproduzível](geometry.md) com quatro cenas originais,
+três resoluções e duas fases subpixel: 24 entradas, seis ajustes, 144 saídas.
+Cada alternativa modifica somente um parâmetro. A referência é o desenho SVG
+original renderizado, não a saída de outro vetorizador. Foram mantidos backend
+0.6.15, modo spline/stacked, precisão de cor 5 e o processamento adaptativo atual.
+
+Parâmetros da versão instalada foram conferidos no stub do pacote e na
+[documentação da versão Python 0.6.15](https://pypi.org/project/vtracer/0.6.15/):
+
+| Parâmetro | Referência do ensaio | Avaliação nesta sessão |
+| --- | --- | --- |
+| `corner_threshold` | 45 (decisão anterior do projeto) | Alternativa 60 |
+| `length_threshold` | 4, padrão do backend | Alternativas 6, 8, 10 |
+| `splice_threshold` | 45, padrão do backend | Alternativa 60 |
+| `max_iterations` | Padrão 10 | Mantido; sem evidência para mudar |
+| `path_precision` | Padrão 8 | Mantido; reduzir casas não resolve forma |
+| `mode` / `hierarchical` | spline / stacked | Mantidos para isolar o experimento |
+
+Não foram utilizados parâmetros da API nova nem feita migração para VTracer 1.0.
+
+### Medição e resultado
+
+Relatório válido: `outputs/geometry/20260908-final/report.json` (renderização
+a 4×). A rodada inicial `20260908-length-sweep` foi descartada porque um
+classificador por cor pura confundia antialias azul/branco com coral. Esse
+defeito da ferramenta foi corrigido e ganhou teste; não houve alteração no
+quantizador de produção. A rodada `20260908-coverage-sweep` antecedeu a adição
+da métrica separada de silhueta; use `20260908-final` como referência completa.
+
+| Ajuste | Segmentos totais | Área divergente média (% da imagem) |
+| --- | ---: | ---: |
+| Atual | 1186 | 0,9865 |
+| Comprimento 6 | 1038 | 0,9452 |
+| Comprimento 8 | 932 | 0,9134 |
+| Comprimento 10 | 880 | 0,8942 |
+| Quina 60 | 1229 | 0,9972 |
+| União 60 | 1127 | 0,9788 |
+
+Comprimento 10 reduziu segmentos em **25,8%**, com melhora média de área.
+Isso não constitui uma melhora universal:
+
+- `arcs-192-phase0`: área divergente caiu de 328,94 para 161,31 px², com
+  39 → 31 segmentos e máximo de borda mantido em 1 pixel.
+- `arcs-96-phase0`: o desenho inteiro melhorou, mas a área perdida no círculo
+  pequeno subiu de 6,31 para 10,31 px². Seu tamanho não deve ser sacrificado
+  apenas porque a média do anel maior ficou melhor.
+- `seam-384-phase0`: área divergente subiu de 256,94 para 285,06 px²; na
+  faixa interna da emenda, 143,88 → 171,06 px². Segmentos: 28 → 27.
+- `tips-96-phase0`: o máximo de erro de borda continuou em 2,85 pixels; reduzir
+  segmentos de 54 para 36 não corrigiu a imprecisão das pontas rasterizadas.
+
+União 60 é um contraexemplo mais claro à redução indiscriminada de complexidade:
+em `seam-96-phase0`, 20 → 19 segmentos, mas área divergente 52,69 → 65,56 px².
+A franja coral se estende pelo topo da região azul. A distância máxima por cor
+passou de 1,25 para 15,50 pixels, enquanto a silhueta permaneceu exata. Isso
+mede extensão de cor indevida, **não** um deslocamento global de 15 pixels.
+Essa mudança foi rejeitada como padrão geral. Quina 60 também não demonstrou
+vantagem agregada; a decisão anterior de 45 foi preservada.
+
+A conferência `20260908-scale8` repetiu as quatro cenas de 96 pixels/fase zero
+com medição a 8× (24 saídas). Confirmou as direções dos problemas locais:
+perda do círculo 6,22 → 9,95 px² com comprimento 10; área divergente da emenda
+52,75 → 66,00 px² com união 60. O máximo por cor desta última foi 19,38 pixels,
+mostrando a sensibilidade de franjas muito finas à grade de medição.
+
+Não houve fresta branca detectada na região interna da emenda em nenhuma das
+144 saídas da rodada principal. Isso vale para esta fixture stacked, não é
+prova de ausência de frestas em qualquer imagem ou renderizador.
+
+### Instabilidade já existente e próximo alvo
+
+Deslocar a cena `seam` apenas meio pixel já produz uma franja coral nas bordas
+externas azuis com os ajustes **atuais**. Em 192 pixels, a área divergente é
+137,13 px² na fase zero e 517,81 px² na fase 0,5. A inspeção das renderizações
+confirmou a franja. Sua origem ainda não foi isolada entre pré-processamento,
+tracing e simplificação de cor. Não atribuir causalidade a uma etapa sem teste.
+
+Os círculos também mudam de complexidade com a fase (39 → 51 segmentos em
+192 pixels), mesmo sem mudança da forma ideal. Portanto, resolução ou contagem
+de cores sozinhas não justificam uma regra adaptativa de geometria.
+
+### Decisão e regressões
+
+Manter TODOS os parâmetros de produção e o backend. Comprimentos 6–10 continuam
+como candidatos de pesquisa, não como regra pronta nem abordagem inteiramente
+descartada. Rejeitar união 60 como padrão geral. A entrega desta etapa é a
+avaliação controlada com um contraexemplo reproduzível, não uma promessa de
+melhoria visual aplicada a todas as imagens.
+
+Após o trabalho, o comparador foi repetido em
+`outputs/geometry-regression-20260908/`: **36/36 SVGs idênticos byte por byte**
+à baseline, abrangendo Perflex, cubo, Mickey, vaca, robô e detalhes únicos e
+repetidos. A suíte passou de 25 para **37 testes**, todos aprovados, incluindo
+calibração de distância, lacunas, detalhe ausente, antialias e equivalência do
+controle. Não foram alterados `src/`, `main.py`, dependências Python nem as
+fixtures antigas. Não houve commit automático, push ou exclusão de arquivos.

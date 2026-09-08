@@ -14,3 +14,8 @@ com uma única estrela irregular relacionada visualmente ao emblema.
 
 As amostras determinísticas podem ser recriadas executando
 `python tools/generate_fixtures.py`.
+
+As novas formas geométricas originais são definidas em
+`tools/geometry_fixtures.py`. O [ensaio geométrico](../docs/geometry.md) gera
+suas referências SVG e entradas PNG dentro de `outputs/`, sem sobrescrever
+os pares acima. São quatro cenas em três resoluções e duas posições na grade.

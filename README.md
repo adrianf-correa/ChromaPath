@@ -95,7 +95,7 @@ Para gerar e medir lado a lado o VTracer direto e o pipeline completo:
 python -m src.comparison "samples/minha-imagem.png"
 ```
 
-Os dois SVGs são armazenados em `outputs/comparisons/`, acompanhados no terminal
+Os três SVGs (direto, preparado e final) são armazenados em `outputs/comparisons/`, acompanhados no terminal
 pela quantidade de caminhos, cores de preenchimento e tamanho de cada arquivo.
 
 O analisador mostra as cores dominantes, suas frequências, distâncias
@@ -114,6 +114,10 @@ python -m src.preprocess "samples/minha-imagem.png"
 Esses comandos ajudam a investigar o pipeline. Para o uso comum, basta executar
 `main.py`.
 
+Há também um [ensaio geométrico reproduzível](docs/geometry.md) com formas
+originais, referência vetorial, medição de contornos e comparação de parâmetros.
+Ele é uma ferramenta de desenvolvimento: não altera os ajustes do programa.
+
 ## Testes
 
 O projeto utiliza o módulo `unittest`, incluído no Python:
@@ -124,7 +128,9 @@ python -m unittest discover -s tests -v
 
 Os testes verificam as principais decisões do pré-processamento, confirmam que
 a simplificação das cores não modifica a quantidade de caminhos do SVG e usam
-um par de imagens original para validar a remoção de ruído de ponta a ponta.
+três pares de imagens originais para validar ruído e detalhes de ponta a ponta.
+Também verificam as métricas geométricas e a equivalência entre o controle do
+ensaio e o vetorizador de produção. Esses testes não exigem Node.js.
 
 ## Estrutura do projeto
 
@@ -163,6 +169,7 @@ para os testes automatizados, fazem parte do repositório.
 
 - Validar e refinar a tolerância adaptativa com mais estilos de imagem.
 - Melhorar a detecção de pequenas regiões sem remover detalhes relevantes.
+- Investigar geometria com referências controladas antes de mudar parâmetros.
 - Comparar o backend atual com os novos recursos do VTracer 1.0.
 - Ampliar o conjunto de imagens de teste com arquivos redistribuíveis.
 - Criar uma interface simples para arrastar a imagem, visualizar e salvar o SVG.
