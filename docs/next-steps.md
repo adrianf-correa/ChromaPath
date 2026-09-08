@@ -46,19 +46,37 @@ padrão geral. Não implementar uma regra por resolução ou número de cores co
 base apenas nesses resultados. Os 37 testes passaram e os 36 SVGs da comparação
 anterior ficaram byte a byte iguais. Detalhes em [experimentos](experiments.md).
 
-**Próximo trabalho exato: isolar a origem da franja subpixel da fixture `seam`.**
+O diagnóstico da franja subpixel também foi concluído. Nas seis entradas de
+`seam`, o raster preparado é idêntico à entrada e o SVG preparado é idêntico
+ao final. O coral indevido nasce no tracing e depende da filtragem do backend:
+`filter_speckle` 1, 2 e 4 preservam o problema; 0 remove o coral, mas multiplica
+caminhos/cores e mantém outros resíduos. Mudar precisão, diferença de camadas
+ou hierarquia não resolveu. Normalizar misturas na borda externa também foi
+testado e rejeitado por piorar silhuetas e diagonais. Não repetir essas trocas
+como se fossem correções ainda não testadas.
 
-1. Reproduzir a cena em 96, 192 e 384 pixels, fases 0 e 0,5, com os parâmetros
-   atuais e o renderizador registrado no ensaio.
-2. Medir separadamente raster de entrada, raster preparado, SVG preparado e
-   SVG final. Identificar a primeira etapa que introduz coral na borda azul.
-3. Criar uma região de medição da borda externa, além da faixa interna já
-   existente. Medir extensão/área da franja sem confundi-la com fresta branca
-   ou erro da silhueta.
-4. Só então experimentar uma correção pequena na etapa responsável. Critérios:
-   reduzir a franja, não abrir frestas e não piorar pontas/círculos locais.
-5. Repetir o ensaio completo, os testes e o comparador dos casos aprovados antes
-   de considerar mudar o comportamento de produção.
+**Próximo trabalho exato: investigar a filtragem interna do backend fixado.**
+
+1. Partir de `tools/fringe_experiment.py` e dos relatórios `fringe-final`/`fringe-final8`
+   documentados em `docs/experiments.md`. Manter o controle de produção.
+2. Obter e inspecionar as fontes correspondentes ao pacote Python 0.6.15 e às
+   dependências Rust efetivamente usadas; não usar `master` como equivalente.
+3. Localizar por que um limite de fragmentos tão pequeno altera a cobertura de
+   uma borda longa. Separar descarte de clusters, atribuição de cores e
+   empilhamento dos caminhos. A etapa externa foi localizada, não essa função
+   interna; ainda não afirmar qual desses mecanismos é o culpado.
+4. Se houver correção pequena viável, testar em isolamento contra a mesma
+   baseline. Se depender de mudança significativa do backend, comparar uma
+   versão nova em ambiente separado antes de propor migração; não atualizar
+   `requirements.txt` automaticamente.
+5. Exigir redução da franja sem novos tons/resíduos, sem frestas e sem piorar
+   silhueta, pontas ou diagonais. Repetir os 24 casos geométricos, os 43 testes
+   e os 36 SVGs anteriores antes de considerar qualquer alteração de produção.
+
+O ensaio padrão foi repetido sem diferenças nos SVGs de controle. A suíte
+atual tem **43 testes aprovados** e os 36 SVGs anteriores seguem byte a byte
+iguais. O candidato `tools/edge_mixture.py` existe apenas para reprodução da
+hipótese rejeitada; não o conectar ao pré-processamento de produção.
 
 Os comprimentos 6–10 ficam para uma rodada posterior com mais curvas pequenas
 e casos reais. A referência de cor Delta E 8, quinas 45 e VTracer 0.6.15 continuam

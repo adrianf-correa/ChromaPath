@@ -304,3 +304,93 @@ repetidos. A suíte passou de 25 para **37 testes**, todos aprovados, incluindo
 calibração de distância, lacunas, detalhe ausente, antialias e equivalência do
 controle. Não foram alterados `src/`, `main.py`, dependências Python nem as
 fixtures antigas. Não houve commit automático, push ou exclusão de arquivos.
+
+## 08/09/2026 — origem da franja subpixel e correções rejeitadas
+
+Retomada a partir do commit limpo `d43d9d0`, com os 37 testes aprovados.
+Objetivo: localizar a primeira etapa que introduz coral na borda azul da
+fixture `seam`, antes de corrigir cores ou geometria indiscriminadamente.
+
+### Causa localizada por etapas
+
+Foi criado `tools/fringe_experiment.py`: três resoluções, fases 0/0,5 e
+faixas externas longe da emenda. Resultado nas seis entradas:
+
+- raster preparado idêntico à entrada;
+- traçado direto idêntico ao traçado da imagem preparada;
+- SVG preparado idêntico ao SVG final;
+- coral externo ausente nos rasters e presente já no traçado, na fase 0,5.
+
+Logo, neste caso, nem o pré-processamento nem a simplificação de cores causam
+a franja. Ela nasce no backend. O SVG empilha coral no fundo, branco com um
+recorte e a região azul por cima. Na fase 0,5, o azul começa mais para dentro
+do que a abertura branca, expondo coral numa borda que era azul/branco.
+
+Área de coral indevido nas três faixas externas, em pixels² da entrada:
+
+| Resolução / fase | Entrada | Preparada | Traçado | Final |
+| --- | ---: | ---: | ---: | ---: |
+| 96 / 0 | 0 | 0 | 0 | 0 |
+| 96 / 0,5 | 0 | 0 | 96,00 | 96,00 |
+| 192 / 0 | 0 | 0 | 0 | 0 |
+| 192 / 0,5 | 0 | 0 | 183,25 | 183,25 |
+| 384 / 0 | 0 | 0 | 0 | 0 |
+| 384 / 0,5 | 0 | 0 | 363,38 | 363,38 |
+
+O experimento associa o defeito à filtragem do backend: `filter_speckle` 1,
+2 e 4 mantêm a franja, enquanto 0 remove o coral indevido. Isso ainda não
+identifica a função interna de Rust responsável, nem prova que a filtragem
+explique todos os defeitos geométricos do projeto.
+
+### Alternativas controladas
+
+1. **`layer_difference` 0/4/8:** não removeu a franja.
+2. **Precisão de cor 8:** não removeu a franja.
+3. **Hierarquia cutout:** não resolveu e introduziu outros desvios; rejeitada
+   como troca geral nesta versão.
+4. **`filter_speckle=0`:** removeu coral indevido, mas preservou franjas de
+   tons intermediários e resíduos. Em 192/fase 0,5, o resultado final passou
+   de 3 caminhos/3 cores/1.837 bytes para 154 caminhos/13 cores/11.725 bytes.
+   A inspeção mostrou faixa cinza e pequenas manchas na emenda. Não adotar.
+5. **Normalização localizada de misturas externas:** troca pixels opacos
+   matematicamente intermediários por fundo/cor vizinha de maior cobertura.
+   Restrita a fundo exatamente uniforme e cores chapadas próximas; não usa
+   cores específicas da fixture. Removeu o coral, mas deformou o contorno.
+
+O quinto candidato foi aplicado às 24 entradas do ensaio, mantendo o mesmo
+tracing e comparando sempre com o controle de produção:
+
+| Caso | Área divergente atual → candidato (px²) | Máximo da silhueta atual → candidato (px) |
+| --- | ---: | ---: |
+| seam 96 / 0,5 | 259,25 → 204,94 | 0,71 → 1,25 |
+| seam 192 / 0,5 | 517,81 → 429,69 | 0,71 → 1,25 |
+| seam 384 / 0,5 | 1.073,56 → 935,38 | 0,71 → 1,50 |
+| diagonals 96 / 0 | 131,44 → 149,75 | 0,75 → 1,25 |
+| arcs 192 / 0,5 | 267,19 → 305,19 | 0,90 → 0,90 |
+
+A média de área divergente melhorou de 0,9865% para 0,9393%, mas os segmentos
+subiram de 1.186 para 1.287 e houve regressões locais. **Rejeitado como regra
+de produção.** O código fica isolado em ferramentas para reprodução da hipótese,
+não conectado ao motor. Não reduzir a exigência de contorno para aprová-lo.
+
+Não houve fresta branca na faixa interna da emenda com esse candidato. Medir
+apenas coral indevido ou apenas frestas teria aprovado uma solução que deforma
+a silhueta; os critérios separados cumpriram seu propósito.
+
+### Reprodutibilidade e proteção
+
+- `outputs/geometry/fringe-final/report.json`: diagnóstico final a 4×.
+- `outputs/geometry/fringe-final8/report.json`: conferência a 8×. Nela, a franja
+  atual nas fases 0,5 foi 96,00 / 183,66 / 364,55 px²; as conclusões se mantêm.
+- `outputs/geometry/exterior-snap-sweep/report.json`: candidato nas 24 entradas.
+- `outputs/geometry/fringe-regression-sweep/`: ensaio original repetido; mesmos
+  resultados das seis configurações, sem alteração dos SVGs de controle.
+- `outputs/geometry-fringe-regression/`: os 36 SVGs antigos permaneceram
+  idênticos byte por byte. `src/`, `main.py` e dependências não foram alterados.
+
+Foram acrescentados testes da medição de área/extensão da franja, invariância
+de escala, separação de cor legítima/fresta e limites do candidato: **43 testes
+aprovados** na suíte completa. A hipótese
+de borda não foi promovida a correção: a causa foi localizada e as alternativas
+simples foram descartadas com evidência. O próximo passo deve investigar a
+filtragem interna do backend fixado, não retunar cores ou aumentar suavização.

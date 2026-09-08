@@ -23,6 +23,7 @@ from src.vectorize import (SHARP_CORNER_THRESHOLD, VTRACER_COLOR_PRECISION,
                            VTRACER_HIERARCHICAL_MODE, preprocess_image, vectorize_image)
 from tools.geometry_fixtures import PALETTE, SCENES, SIZE, reference_svg
 from tools.geometry_metrics import geometry_metrics, palette_labels, path_complexity
+from tools.edge_mixture import snap_exterior_mixtures
 
 VARIANTS = {
     "current": {},
@@ -59,7 +60,8 @@ def read_labels(path: Path) -> np.ndarray:
 
 
 def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float],
-                   render_scale: int = RENDER_SCALE) -> dict:
+                   render_scale: int = RENDER_SCALE, compare_exterior_mixtures: bool = False) -> dict:
+    variants = {"current": {}, "exterior_snap": {}} if compare_exterior_mixtures else VARIANTS
     output = output.resolve()
     # Never silently replace a previous experiment or unrelated directory.
     output.mkdir(parents=True, exist_ok=False)
@@ -81,6 +83,12 @@ def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float
         directory = case["directory"]
         preprocessing = preprocess_colors(directory / "input.png", directory / "prepared.png")
         image = preprocess_image(directory / "prepared.png")
+        snapped_image = image
+        if compare_exterior_mixtures:
+            snapped, count = snap_exterior_mixtures(np.asarray(image))
+            snapped_image = Image.fromarray(snapped)
+            snapped_image.save(directory / "snapped-input.png")
+            case["snapped_pixels"] = count
         # Use the real production entry point as control, not only its copied options.
         vectorize_image(directory / "prepared.png", directory / "current.svg",
                         filter_speckle=preprocessing["filter_speckle"])
@@ -88,9 +96,10 @@ def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float
         if experimental_trace(image, preprocessing["filter_speckle"], {}) != control:
             raise AssertionError("O controle experimental divergiu da produção")
         trace_reports[case["name"]] = {}
-        for variant, overrides in VARIANTS.items():
+        for variant, overrides in variants.items():
             svg = control if variant == "current" else experimental_trace(
-                image, preprocessing["filter_speckle"], overrides)
+                snapped_image if variant == "exterior_snap" else image,
+                preprocessing["filter_speckle"], overrides)
             path = directory / f"{variant}.svg"
             path.write_text(svg, encoding="utf-8")
             trace_reports[case["name"]][variant] = dict(
@@ -103,7 +112,7 @@ def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float
     for case in cases:
         directory = case["directory"]
         reference = read_labels(directory / "reference.png")
-        for variant in VARIANTS:
+        for variant in variants:
             actual = read_labels(directory / f"{variant}.png")
             if actual.shape != reference.shape:
                 raise AssertionError("Render de saída não coincide com dimensões da referência")
@@ -121,14 +130,17 @@ def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float
         print(f'Measured {case["name"]}', flush=True)
     sources = [Path(__file__), Path(__file__).with_name("geometry_fixtures.py"),
                Path(__file__).with_name("geometry_metrics.py"), Path(__file__).with_name("render_geometry.cjs")]
+    if compare_exterior_mixtures:
+        sources.append(Path(__file__).with_name("edge_mixture.py"))
     report = dict(
         versions=dict(python=platform.python_version(), **{name: version(name) for name in
                       ("vtracer", "Pillow", "numpy", "opencv-python-headless")}, renderer=renderer_versions),
         source_sha256={p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
-        settings=dict(render_scale=render_scale, sizes=sizes, phases=phases, variants=VARIANTS,
+        settings=dict(render_scale=render_scale, sizes=sizes, phases=phases, variants=variants,
                       corner_threshold=SHARP_CORNER_THRESHOLD, color_precision=VTRACER_COLOR_PRECISION,
                       hierarchical=VTRACER_HIERARCHICAL_MODE),
-        preprocessing={c["name"]: c["preprocessing"] for c in cases}, rows=rows)
+        preprocessing={c["name"]: c["preprocessing"] for c in cases},
+        snapped_pixels={c["name"]: c.get("snapped_pixels", 0) for c in cases}, rows=rows)
     (output / "report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     with (output / "summary.csv").open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=("case", "variant", "segments", "bytes",
@@ -142,7 +154,7 @@ def run_experiment(output: Path, node: str, sizes: list[int], phases: list[float
                 silhouette_max_px=row["silhouette"]["boundary_max_px"],
                 color_boundary_max_px=None if None in maxima else max(maxima, default=0)))
     print("Variant     Segments  Mean mismatched image area (%)")
-    for variant in VARIANTS:
+    for variant in variants:
         selected = [row for row in rows if row["variant"] == variant]
         mean = sum(row["mismatch_area_px"] / row["size"]**2 for row in selected) / len(selected)
         print(f'{variant:<12}{sum(row["segments"] for row in selected):>8}  {100 * mean:.4f}')
@@ -157,6 +169,8 @@ def main() -> None:
     parser.add_argument("--phases", type=float, nargs="+", default=[0.0, 0.5])
     parser.add_argument("--render-scale", type=int, default=RENDER_SCALE,
                         help="Escala de medição; 4 padrão, 8 para conferir amostragem")
+    parser.add_argument("--compare-exterior-mixtures", action="store_true",
+                        help="Compara apenas produção e o candidato experimental de borda")
     args = parser.parse_args()
     if any(size < 32 or size > 1024 for size in args.sizes):
         parser.error("Use resoluções entre 32 e 1024")
@@ -164,7 +178,8 @@ def main() -> None:
         parser.error("Use fases entre 0 (inclusive) e 1 (exclusive)")
     if not 1 <= args.render_scale <= 8:
         parser.error("Use escala de renderização entre 1 e 8")
-    run_experiment(args.output, args.node, args.sizes, args.phases, args.render_scale)
+    run_experiment(args.output, args.node, args.sizes, args.phases, args.render_scale,
+                   args.compare_exterior_mixtures)
     print(f'Relatório: {args.output / "report.json"}')
 
 

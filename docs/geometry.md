@@ -105,3 +105,38 @@ renderização registram exatamente quais arquivos foram processados.
 As saídas ficam ignoradas pelo Git; os geradores e testes são versionados.
 As versões das bibliotecas de renderização devem ser comparadas antes de tratar
 diferenças mínimas entre máquinas como regressão do ChromaPath.
+
+## Diagnóstico da franja externa
+
+O incremento seguinte separou as etapas da cena `seam` em seis entradas:
+
+```powershell
+python -m tools.fringe_experiment --output outputs/geometry/minha-franja
+python -m tools.fringe_experiment --output outputs/geometry/minha-franja8 --render-scale 8
+```
+
+São salvos entrada, imagem preparada, traçado direto, traçado da imagem
+preparada, resultado final e candidatos isolados. O relatório contém comparação
+exata dos rasters/SVGs, parâmetros, versões, hashes e métricas. As faixas
+externas esquerda, superior e inferior ficam longe da região legitimamente
+coral: ali medimos área de coral indevido e extensão atingida. A emenda interna,
+as frestas brancas e a silhueta continuam sendo medidas separadamente.
+
+Para rasters, os rótulos são repetidos na grade de medição sem interpolação;
+isso não recupera informação subpixel. Essa comparação serve para localizar
+em qual etapa surge a cor indevida, não para equiparar resolução raster e vetor.
+
+O candidato de normalização das misturas externas está em
+`tools/edge_mixture.py`, **somente para reproduzir uma hipótese rejeitada**.
+Ele pode ser comparado sobre as 24 entradas do ensaio geométrico:
+
+```powershell
+python -m tools.geometry_experiment --output outputs/geometry/minhas-misturas --compare-exterior-mixtures
+```
+
+Esse modo executa apenas `current` e `exterior_snap`. Sem a opção, o ensaio
+original continua com os mesmos seis ajustes e resultados. O candidato usa
+cores chapadas vizinhas detectadas na própria imagem e fundo uniforme, não
+uma paleta fixa, mas piorou contornos e por isso **não deve ser conectado a
+`src/preprocess.py`**. Igualdade matemática com uma mistura de cores também
+não prova que um detalhe seja antialias descartável.
